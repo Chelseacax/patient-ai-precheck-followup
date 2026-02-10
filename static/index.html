@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedBridge — Multilingual Healthcare Communication</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<!-- ===== Top Navigation ===== -->
+<nav class="topnav">
+    <div class="topnav-brand" onclick="navigateTo('home')">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="2" y="10" width="24" height="8" rx="2" fill="#4f9cf7"/><rect x="10" y="2" width="8" height="24" rx="2" fill="#4f9cf7"/></svg>
+        <span>MedBridge</span>
+    </div>
+    <div class="topnav-links">
+        <button class="nav-btn active" data-view="home" onclick="navigateTo('home')">Home</button>
+        <button class="nav-btn" data-view="patient" onclick="navigateTo('patient')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Patient Portal
+        </button>
+        <button class="nav-btn" data-view="doctor" onclick="navigateTo('doctor')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            Doctor Portal
+        </button>
+    </div>
+</nav>
+
+<!-- ===== API Key Banner ===== -->
+<div id="api-key-banner" class="api-key-banner hidden">
+    <div class="api-key-banner-content">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span><strong>API key not configured.</strong> Enter your OpenAI or Groq API key to enable AI conversations.</span>
+        <div class="api-key-input-group">
+            <input type="password" id="api-key-input" placeholder="sk-... or gsk_..." autocomplete="off">
+            <button class="btn btn-primary btn-sm" onclick="saveApiKey()">Save Key</button>
+        </div>
+        <button class="btn btn-icon btn-sm" onclick="dismissBanner()" title="Dismiss" style="opacity:0.6">&times;</button>
+    </div>
+</div>
+
+<!-- ===== VIEW: Home ===== -->
+<section id="view-home" class="view active">
+    <div class="hero">
+        <div class="hero-content">
+            <h1>Bridging Language Barriers in Healthcare</h1>
+            <p class="hero-sub">AI-powered multilingual communication for Singapore &amp; Southeast Asia — enabling patients to speak in their language while doctors receive accurate English translations and clinical summaries.</p>
+        </div>
+
+        <div class="portal-cards">
+            <div class="portal-card patient-card" onclick="navigateTo('patient')">
+                <div class="portal-icon patient-icon">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+                <h2>Patient Portal</h2>
+                <p>Check in for your appointment or follow up after your visit. Speak in your preferred language — 华语, 福建话, 广东话, Malay, Tamil, and more.</p>
+                <ul class="portal-features">
+                    <li>Pre-consultation symptom check-in</li>
+                    <li>Post-consultation medication review</li>
+                    <li>Chat in 18 languages &amp; dialects</li>
+                </ul>
+                <span class="portal-cta">Enter Patient Portal &rarr;</span>
+            </div>
+            <div class="portal-card doctor-card" onclick="navigateTo('doctor')">
+                <div class="portal-icon doctor-icon">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                </div>
+                <h2>Doctor Portal</h2>
+                <p>Review patient sessions with structured clinical summaries in English and bilingual conversation transcripts for translation verification.</p>
+                <ul class="portal-features">
+                    <li>Clinical summaries in English</li>
+                    <li>Side-by-side translation view</li>
+                    <li>Full conversation transcripts</li>
+                </ul>
+                <span class="portal-cta">Enter Doctor Portal &rarr;</span>
+            </div>
+        </div>
+
+        <div class="hero-features">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                </div>
+                <h3>18 Languages &amp; Dialects</h3>
+                <p>华语, 福建话, 潮州话, 广东话, Malay, Tamil, and more — with Singapore dialect support</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                <h3>Real-time Translation</h3>
+                <p>Every message translated to English instantly — doctors always understand the full picture</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                </div>
+                <h3>Clinical Summaries</h3>
+                <p>Structured reports with chief complaints, medications, red flags, and follow-up plans</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ===== VIEW: Patient Portal ===== -->
+<section id="view-patient" class="view">
+    <div class="portal-label patient-label">Patient Portal</div>
+
+    <!-- Step: Registration -->
+    <div id="patient-register" class="patient-step active">
+        <div class="container-narrow">
+            <div class="card card-elevated">
+                <div class="card-header">
+                    <h2>Welcome — Let's Get Started</h2>
+                    <p class="text-muted">Tell us a little about yourself so we can communicate in the language and way that works best for you.</p>
+                </div>
+                <form id="form-register" onsubmit="handleRegister(event)">
+                    <div class="form-group">
+                        <label for="reg-name">Full Name <span class="required">*</span></label>
+                        <input type="text" id="reg-name" required placeholder="e.g. Ahmad bin Ibrahim" autocomplete="name">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="reg-dob">Date of Birth</label>
+                            <input type="date" id="reg-dob">
+                        </div>
+                        <div class="form-group">
+                            <label for="reg-language">Preferred Language <span class="required">*</span></label>
+                            <select id="reg-language" required onchange="updateDialects()"></select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-dialect">Dialect / Variant</label>
+                        <select id="reg-dialect"><option value="">— Select —</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-cultural">Cultural Considerations <span class="text-muted">(optional)</span></label>
+                        <textarea id="reg-cultural" rows="3" placeholder="e.g. Halal dietary requirements; family makes health decisions together; prefers traditional medicine alongside Western treatment…"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Session Type <span class="required">*</span></label>
+                        <div class="radio-group">
+                            <label class="radio-card">
+                                <input type="radio" name="session-type" value="pre" checked>
+                                <div class="radio-card-body">
+                                    <strong>Pre-Consultation Check-In</strong>
+                                    <span>Share symptoms &amp; history before your appointment</span>
+                                </div>
+                            </label>
+                            <label class="radio-card">
+                                <input type="radio" name="session-type" value="post">
+                                <div class="radio-card-body">
+                                    <strong>Post-Consultation Follow-Up</strong>
+                                    <span>Review your visit, medications &amp; next steps</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block" id="btn-start-session">
+                        Begin Session
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step: Chat -->
+    <div id="patient-chat" class="patient-step">
+        <div class="chat-container">
+            <div class="chat-header">
+                <div class="chat-header-left">
+                    <button class="btn btn-icon" onclick="backToRegister()" title="Back">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                    </button>
+                    <div>
+                        <h3 id="chat-title">Session</h3>
+                        <span class="badge" id="chat-lang-badge">English</span>
+                        <span class="badge badge-outline" id="chat-type-badge">Pre-Consultation</span>
+                    </div>
+                </div>
+                <button class="btn btn-success" id="btn-complete" onclick="completeSession()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    Complete &amp; Summarize
+                </button>
+            </div>
+            <div class="chat-messages" id="chat-messages"></div>
+            <div id="voice-status" class="voice-status">
+                <span class="voice-status-dot"></span>
+                <span id="voice-status-text">Listening…</span>
+            </div>
+            <div class="chat-input-bar">
+                <textarea id="chat-input" rows="1" placeholder="Type or tap the mic to speak…" onkeydown="handleChatKey(event)" oninput="autoResize(this)"></textarea>
+                <button class="btn btn-mic" id="btn-mic" onclick="toggleVoiceInput()" title="Speak your message">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                </button>
+                <button class="btn btn-primary btn-icon" id="btn-send" onclick="sendMessage()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step: Patient Summary -->
+    <div id="patient-summary" class="patient-step">
+        <div class="container-narrow">
+            <div class="card card-elevated">
+                <div class="card-header">
+                    <h2>Your Visit Summary</h2>
+                    <p class="text-muted">Here is a summary of your session in your preferred language.</p>
+                </div>
+                <div id="patient-summary-content" class="summary-content"></div>
+                <div class="card-actions">
+                    <button class="btn btn-primary" onclick="backToRegister()">Start New Session</button>
+                    <button class="btn btn-outline" onclick="navigateTo('doctor')">View Doctor Portal</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ===== VIEW: Doctor Portal ===== -->
+<section id="view-doctor" class="view">
+    <div class="portal-label doctor-label">Doctor Portal</div>
+    <div class="dashboard">
+        <div class="dashboard-sidebar">
+            <div class="sidebar-header">
+                <h3>Patients</h3>
+                <button class="btn btn-sm btn-outline" onclick="loadSessions()" title="Refresh list">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    Refresh
+                </button>
+            </div>
+            <div class="sidebar-filters">
+                <label class="sidebar-filter-label">Sort by</label>
+                <select id="filter-sort" onchange="loadSessions()">
+                    <option value="newest">Newest first</option>
+                    <option value="name-az">Name (A–Z)</option>
+                    <option value="name-za">Name (Z–A)</option>
+                </select>
+                <label class="sidebar-filter-label">Type</label>
+                <select id="filter-type" onchange="loadSessions()">
+                    <option value="">All Types</option>
+                    <option value="pre">Pre-Consultation</option>
+                    <option value="post">Post-Consultation</option>
+                </select>
+                <label class="sidebar-filter-label">Status</label>
+                <select id="filter-status" onchange="loadSessions()">
+                    <option value="">All Status</option>
+                    <option value="completed">Completed</option>
+                    <option value="in_progress">In Progress</option>
+                </select>
+                <label class="sidebar-filter-label">Priority</label>
+                <select id="filter-urgent" onchange="loadSessions()">
+                    <option value="">All</option>
+                    <option value="urgent">Urgent only</option>
+                </select>
+            </div>
+            <div id="session-list" class="session-list">
+                <div class="empty-state">
+                    <p>No sessions yet.</p>
+                    <p class="text-muted">Sessions appear here once patients complete check-ins or follow-ups.</p>
+                </div>
+            </div>
+        </div>
+        <div class="dashboard-main" id="dashboard-main">
+            <div class="empty-state-large">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                <h3>Select a Session</h3>
+                <p class="text-muted">Choose a session from the sidebar to view the clinical summary, bilingual conversation transcript, and patient information.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ===== Spinner Overlay ===== -->
+<div id="spinner-overlay" class="spinner-overlay hidden">
+    <div class="spinner"></div>
+    <p id="spinner-text">Processing…</p>
+</div>
+
+<!-- ===== Patient Portal: Visual Accessibility Toolbar ===== -->
+<div id="a11y-toolbar-wrap" class="a11y-toolbar-wrap hidden" aria-label="Visual accessibility options">
+    <button type="button" id="a11y-toolbar-toggle" class="a11y-toolbar-toggle" onclick="toggleA11yPanel()" title="Open accessibility options">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        <span>Accessibility</span>
+    </button>
+    <div id="a11y-panel" class="a11y-panel hidden">
+        <div class="a11y-panel-header">
+            <h4>Visual accessibility</h4>
+            <button type="button" class="a11y-panel-close" onclick="toggleA11yPanel()" aria-label="Close">×</button>
+        </div>
+        <div class="a11y-panel-body">
+            <div class="a11y-group">
+                <label>Screen magnifier</label>
+                <div class="a11y-options">
+                    <label class="a11y-option"><input type="radio" name="a11y-magnifier" value="off" checked> Off</label>
+                    <label class="a11y-option"><input type="radio" name="a11y-magnifier" value="125"> 125%</label>
+                    <label class="a11y-option"><input type="radio" name="a11y-magnifier" value="150"> 150%</label>
+                    <label class="a11y-option"><input type="radio" name="a11y-magnifier" value="200"> 200%</label>
+                    <label class="a11y-option"><input type="radio" name="a11y-magnifier" value="loupe"> Loupe</label>
+                </div>
+            </div>
+            <div class="a11y-group">
+                <label>Color theme</label>
+                <div class="a11y-options">
+                    <label class="a11y-option"><input type="radio" name="a11y-theme" value="default" checked> Default</label>
+                    <label class="a11y-option"><input type="radio" name="a11y-theme" value="high-contrast-light"> High contrast (light)</label>
+                    <label class="a11y-option"><input type="radio" name="a11y-theme" value="high-contrast-dark"> High contrast (dark)</label>
+                </div>
+            </div>
+            <div class="a11y-group">
+                <label>Text size</label>
+                <div class="a11y-options">
+                    <label class="a11y-option"><input type="radio" name="a11y-text" value="normal" checked> Normal</label>
+                    <label class="a11y-option"><input type="radio" name="a11y-text" value="large"> Large</label>
+                </div>
+            </div>
+            <div class="a11y-group">
+                <label class="a11y-check">
+                    <input type="checkbox" name="a11y-reduced-motion">
+                    <span>Reduce motion</span>
+                </label>
+            </div>
+            <div class="a11y-group">
+                <label class="a11y-check">
+                    <input type="checkbox" name="a11y-focus-visible">
+                    <span>Strong focus outline</span>
+                </label>
+            </div>
+        </div>
+    </div>
+</div>
+<div id="a11y-loupe" class="a11y-loupe hidden" aria-hidden="true"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
