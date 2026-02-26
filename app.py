@@ -6,6 +6,7 @@ Singapore / Southeast Asian Context
 Dual-portal design:
   • Patient Portal  – Pre/post-consultation chat in patient's preferred language
   • Doctor Portal   – Clinical summaries, bilingual transcripts, translation review
+  • Voice Appointment Booking – AI voice agent for booking appointments
 """
 
 import os
@@ -17,6 +18,10 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from openai import OpenAI, AuthenticationError
+try:
+    import anthropic as _anthropic_sdk
+except ImportError:
+    _anthropic_sdk = None
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -31,25 +36,44 @@ app.json.sort_keys = False   # preserve insertion order for language dropdown
 db = SQLAlchemy(app)
 
 # ---------------------------------------------------------------------------
-# LLM Client — supports OpenAI or Groq via the OpenAI-compatible client
+# LLM Client — supports Claude (Anthropic), SEA-LION, Groq, OpenAI
+# Priority order: ANTHROPIC_API_KEY > SEALION_API_KEY > GROQ_API_KEY > OPENAI_API_KEY
 # ---------------------------------------------------------------------------
 
-_llm_client = None
+_llm_client = None   # cached OpenAI-compatible client
 LLM_MODEL = os.getenv("LLM_MODEL", "")
 
 
 def _resolve_provider():
     """Detect which provider to use based on available env vars."""
-    groq_key = os.getenv("GROQ_API_KEY", "")
-    openai_key = os.getenv("OPENAI_API_KEY", "")
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
+    sealion_key   = os.getenv("SEALION_API_KEY", "")
+    groq_key      = os.getenv("GROQ_API_KEY", "")
+    openai_key    = os.getenv("OPENAI_API_KEY", "")
+
+    if anthropic_key:
+        return {
+            "type": "anthropic", "name": "Claude",
+            "api_key": anthropic_key,
+            "model": os.getenv("LLM_MODEL", "claude-sonnet-4-5"),
+        }
+    if sealion_key:
+        return {
+            "type": "openai_compat", "name": "SEA-LION",
+            "api_key": sealion_key,
+            "base_url": "https://api.sea-lion.ai/v1",
+            "model": os.getenv("LLM_MODEL", "aisingapore/gemma3-12b-it"),
+        }
     if groq_key:
         return {
+            "type": "openai_compat", "name": "Groq",
             "api_key": groq_key,
             "base_url": "https://api.groq.com/openai/v1",
             "model": os.getenv("LLM_MODEL", "llama-3.3-70b-versatile"),
         }
     if openai_key:
         return {
+            "type": "openai_compat", "name": "OpenAI",
             "api_key": openai_key,
             "base_url": None,
             "model": os.getenv("LLM_MODEL", "gpt-4o"),
@@ -57,15 +81,85 @@ def _resolve_provider():
     return None
 
 
-def get_llm_client():
-    """Return the LLM client, creating/recreating it when config changes."""
-    global _llm_client, LLM_MODEL
+def call_llm(messages, max_tokens=500, temperature=0.7):
+    """
+    Unified LLM call for all providers.
+
+    Returns (text, api_key_invalid):
+      - (str,  False) on success
+      - (None, True)  if the API key was rejected (auth error)
+      - (None, False) if no provider is configured
+    Raises other exceptions for transient/unexpected errors.
+    """
+    global LLM_MODEL, _llm_client
     provider = _resolve_provider()
     if not provider:
+        return None, False
+
+    LLM_MODEL = provider["model"]
+
+    # ---- Anthropic Claude ----
+    if provider["type"] == "anthropic":
+        if _anthropic_sdk is None:
+            app.logger.error("anthropic package not installed – run: pip install anthropic")
+            return None, False
+
+        system_msg = next((m["content"] for m in messages if m["role"] == "system"), "")
+        chat_msgs  = [m for m in messages if m["role"] != "system"]
+
+        # Anthropic requires at least one user message and must start with user
+        if not chat_msgs:
+            chat_msgs = [{"role": "user", "content": "Begin."}]
+        elif chat_msgs[0]["role"] != "user":
+            chat_msgs.insert(0, {"role": "user", "content": "."})
+
+        kwargs = {
+            "model": provider["model"],
+            "messages": chat_msgs,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if system_msg:
+            kwargs["system"] = system_msg
+
+        try:
+            client = _anthropic_sdk.Anthropic(api_key=provider["api_key"])
+            resp = client.messages.create(**kwargs)
+            return resp.content[0].text, False
+        except _anthropic_sdk.AuthenticationError:
+            return None, True
+        except Exception:
+            raise
+
+    # ---- OpenAI-compatible (SEA-LION / Groq / OpenAI) ----
+    oa_kwargs = {"api_key": provider["api_key"]}
+    if provider.get("base_url"):
+        oa_kwargs["base_url"] = provider["base_url"]
+    if _llm_client is None or _llm_client.api_key != provider["api_key"]:
+        _llm_client = OpenAI(**oa_kwargs)
+    try:
+        resp = _llm_client.chat.completions.create(
+            model=provider["model"],
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        return resp.choices[0].message.content, False
+    except AuthenticationError:
+        return None, True
+    except Exception:
+        raise
+
+
+def get_llm_client():
+    """Legacy helper – returns an OpenAI-compatible client or None for Anthropic."""
+    provider = _resolve_provider()
+    if not provider or provider["type"] == "anthropic":
         return None
+    global LLM_MODEL, _llm_client
     LLM_MODEL = provider["model"]
     kwargs = {"api_key": provider["api_key"]}
-    if provider["base_url"]:
+    if provider.get("base_url"):
         kwargs["base_url"] = provider["base_url"]
     if _llm_client is None or _llm_client.api_key != provider["api_key"]:
         _llm_client = OpenAI(**kwargs)
@@ -214,12 +308,8 @@ def _translate_to_english(text, source_language):
         return None
     if source_language in LANGUAGES_SKIP_ENGLISH_TRANSLATION:
         return None
-    ai = get_llm_client()
-    if not ai:
-        return None
     try:
-        response = ai.chat.completions.create(
-            model=LLM_MODEL,
+        result, _ = call_llm(
             messages=[
                 {
                     "role": "system",
@@ -235,7 +325,7 @@ def _translate_to_english(text, source_language):
             max_tokens=600,
             temperature=0.15,
         )
-        return response.choices[0].message.content.strip()
+        return result.strip() if result else None
     except Exception as e:
         app.logger.warning("Translation to English failed: %s", e)
         return None
@@ -266,22 +356,25 @@ Be aware of:
 """
 
     if session_type == "pre":
-        return f"""You are MedBridge, a warm, empathetic multilingual healthcare assistant conducting
-a PRE-CONSULTATION CHECK-IN with {patient_name}.
+        return f"""You are Aria, a warm and empathetic AI voice assistant conducting
+a VOICE PRE-CONSULTATION CHECK-IN with {patient_name} at MedBridge Clinic, Singapore.
 {sea_context}
 Your goals:
-1. Greet the patient warmly in {language} ({dialect} dialect/variant).
-2. Gather chief complaint(s), symptom history, current medications, allergies, and relevant social history.
-3. Ask about pain levels, duration, and any changes.
-4. Screen for urgent "red flag" symptoms (chest pain, difficulty breathing, severe headache, etc.) and flag them clearly.
-5. Use simple, everyday words — avoid medical jargon. If you must mention a medical term, immediately explain it in plain language.
-6. Be culturally sensitive: respect naming conventions, family decision-making norms, dietary and religious considerations.
-7. Ask one or two questions at a time; don't overwhelm.
-8. At the end, confirm a summary of what the patient reported, in their language.
+1. Greet {patient_name} warmly in {language} ({dialect} dialect/variant).
+2. Collect ONE piece of information per turn: chief complaint → symptom details (duration, severity) → current medications → allergies → relevant history.
+3. Ask about pain levels (1–10 scale), onset, and any worsening or alleviating factors.
+4. Screen for urgent red-flag symptoms (chest pain, difficulty breathing, severe headache, fainting, etc.) — if present, advise the patient to seek emergency care immediately.
+5. Use simple everyday words — this is a VOICE conversation. No lists or bullet points.
+6. Be culturally sensitive and warm throughout.
+7. When you have gathered enough information, say a brief confirmation summary.
 
 Language: Respond ENTIRELY in {language} ({dialect} dialect/variant).
 {cultural_note}
-IMPORTANT: Keep responses concise (2-4 sentences). Always be compassionate and patient."""
+CRITICAL VOICE RULES:
+- Keep EVERY response to 1–2 short sentences maximum. This conversation will be read aloud.
+- Ask only ONE question per turn.
+- Never use markdown, bullet points, or numbered lists.
+- Be warm, natural, and conversational — like a caring nurse on the phone."""
 
     else:   # post
         return f"""You are MedBridge, a warm, empathetic multilingual healthcare assistant conducting
@@ -355,50 +448,98 @@ def config_status():
 
     key = provider["api_key"]
     api_key_valid = True
-    try:
-        kwargs = {"api_key": key}
-        if provider["base_url"]:
-            kwargs["base_url"] = provider["base_url"]
-        test_client = OpenAI(**kwargs)
-        test_client.models.list()
-    except AuthenticationError:
-        api_key_valid = False
-    except Exception:
-        api_key_valid = True   # transient error — assume valid
 
-    provider_name = "Groq" if provider["base_url"] and "groq" in provider["base_url"] else "OpenAI"
+    if provider["type"] == "anthropic":
+        if _anthropic_sdk is None:
+            api_key_valid = False
+        else:
+            try:
+                test_client = _anthropic_sdk.Anthropic(api_key=key)
+                list(test_client.models.list())
+            except _anthropic_sdk.AuthenticationError:
+                api_key_valid = False
+            except Exception:
+                api_key_valid = True   # transient error — assume valid
+    else:
+        try:
+            oa_kwargs = {"api_key": key}
+            if provider.get("base_url"):
+                oa_kwargs["base_url"] = provider["base_url"]
+            test_client = OpenAI(**oa_kwargs)
+            test_client.models.list()
+        except AuthenticationError:
+            api_key_valid = False
+        except Exception:
+            api_key_valid = True   # transient error — assume valid
+
     return jsonify({
         "api_key_set": True,
         "api_key_valid": api_key_valid,
         "api_key_preview": f"{key[:8]}...{key[-4:]}" if len(key) > 12 else "",
         "model": provider["model"],
-        "provider": provider_name,
+        "provider": provider["name"],
     })
 
 
 @app.route("/api/config/apikey", methods=["POST"])
 def set_api_key():
-    """Set an LLM API key at runtime. Auto-detects Groq vs OpenAI."""
+    """
+    Set an LLM API key at runtime.
+
+    Auto-detects provider from key prefix:
+      sk-ant-...  → Anthropic (Claude)
+      gsk_...     → Groq
+      sl-...      → SEA-LION
+      (other)     → OpenAI
+
+    Optionally pass {"provider": "sealion"} to force SEA-LION detection
+    when the key has no recognisable prefix.
+    """
     data = request.json
     key = data.get("api_key", "").strip()
+    provider_hint = data.get("provider", "").lower()
     if not key:
         return jsonify({"error": "API key cannot be empty"}), 400
 
-    if key.startswith("gsk_"):
-        env_var = "GROQ_API_KEY"
-        base_url = "https://api.groq.com/openai/v1"
+    # Determine provider
+    if key.startswith("sk-ant-") or provider_hint == "anthropic":
+        env_var      = "ANTHROPIC_API_KEY"
+        provider_type = "anthropic"
+    elif key.startswith("gsk_") or provider_hint == "groq":
+        env_var      = "GROQ_API_KEY"
+        provider_type = "groq"
+    elif key.startswith("sl-") or provider_hint == "sealion":
+        env_var      = "SEALION_API_KEY"
+        provider_type = "sealion"
     else:
-        env_var = "OPENAI_API_KEY"
-        base_url = None
+        env_var      = "OPENAI_API_KEY"
+        provider_type = "openai"
 
-    try:
-        kwargs = {"api_key": key}
-        if base_url:
-            kwargs["base_url"] = base_url
-        test_client = OpenAI(**kwargs)
-        test_client.models.list()
-    except Exception as e:
-        return jsonify({"error": f"Invalid API key: {str(e)[:200]}"}), 400
+    # Validate key
+    if provider_type == "anthropic":
+        if _anthropic_sdk is None:
+            return jsonify({"error": "anthropic package not installed. Run: pip install anthropic"}), 500
+        try:
+            test_client = _anthropic_sdk.Anthropic(api_key=key)
+            list(test_client.models.list())
+        except _anthropic_sdk.AuthenticationError:
+            return jsonify({"error": "Invalid Anthropic API key."}), 400
+        except Exception as e:
+            return jsonify({"error": f"Could not validate key: {str(e)[:200]}"}), 400
+    else:
+        base_url = {
+            "groq":    "https://api.groq.com/openai/v1",
+            "sealion": "https://api.sea-lion.ai/v1",
+            "openai":  None,
+        }[provider_type]
+        try:
+            oa_kwargs = {"api_key": key}
+            if base_url:
+                oa_kwargs["base_url"] = base_url
+            test_client = OpenAI(**oa_kwargs)
+            test_client.models.list()
+        except Exception as e:
+            return jsonify({"error": f"Invalid API key: {str(e)[:200]}"}), 400
 
     os.environ[env_var] = key
     env_path = os.path.join(os.path.dirname(__file__), ".env")
@@ -512,23 +653,16 @@ def create_session():
 
     # Generate initial greeting
     api_key_invalid = False
-    ai = get_llm_client()
-    if ai:
-        try:
-            response = ai.chat.completions.create(
-                model=LLM_MODEL,
-                messages=[{"role": "system", "content": system_prompt}],
-                max_tokens=300,
-                temperature=0.7,
-            )
-            greeting = response.choices[0].message.content
-        except AuthenticationError:
+    try:
+        greeting, api_key_invalid = call_llm(
+            messages=[{"role": "system", "content": system_prompt}],
+            max_tokens=300,
+            temperature=0.7,
+        )
+        if not greeting:
             greeting = _fallback_greeting(language, patient.name, session.session_type)
-            api_key_invalid = True
-        except Exception as e:
-            app.logger.warning("LLM call failed for greeting: %s", e)
-            greeting = _fallback_greeting(language, patient.name, session.session_type)
-    else:
+    except Exception as e:
+        app.logger.warning("LLM call failed for greeting: %s", e)
         greeting = _fallback_greeting(language, patient.name, session.session_type)
 
     # Translate greeting to English for doctor portal
@@ -574,25 +708,17 @@ def send_message(session_id):
 
     # Get AI response
     api_key_invalid = False
-    ai = get_llm_client()
-    if not ai:
-        reply = "[API key not configured. Please set your API key using the settings panel.]"
-        api_key_invalid = True
-    else:
-        try:
-            response = ai.chat.completions.create(
-                model=LLM_MODEL,
-                messages=conversation,
-                max_tokens=400,
-                temperature=0.7,
-            )
-            reply = response.choices[0].message.content
-        except AuthenticationError:
-            reply = "[API key is invalid or expired. Please update it.]"
-            api_key_invalid = True
-        except Exception as e:
-            app.logger.error("LLM chat error: %s", e)
-            reply = f"[Translation service temporarily unavailable. Error: {str(e)[:150]}]"
+    try:
+        reply, api_key_invalid = call_llm(conversation, max_tokens=400, temperature=0.7)
+        if reply is None:
+            if api_key_invalid:
+                reply = "[API key is invalid or expired. Please update it.]"
+            else:
+                reply = "[API key not configured. Please set your API key using the settings panel.]"
+                api_key_invalid = True
+    except Exception as e:
+        app.logger.error("LLM chat error: %s", e)
+        reply = f"[Translation service temporarily unavailable. Error: {str(e)[:150]}]"
 
     # Translate AI reply to English for doctor
     reply_translated = _translate_to_english(reply, session.language_used)
@@ -628,21 +754,15 @@ def complete_session(session_id):
 
     summary_prompt = _build_summary_prompt(convo_text, session.session_type, session.language_used)
 
-    ai = get_llm_client()
-    if not ai:
-        summaries = {
-            "clinician_summary": "Summary unavailable — API key is not configured.",
-            "patient_summary": "",
-        }
-    else:
-        try:
-            response = ai.chat.completions.create(
-                model=LLM_MODEL,
-                messages=[{"role": "system", "content": summary_prompt}],
-                max_tokens=1500,
-                temperature=0.3,
-            )
-            raw = response.choices[0].message.content
+    try:
+        raw, _ = call_llm(
+            messages=[{"role": "system", "content": summary_prompt}],
+            max_tokens=1500,
+            temperature=0.3,
+        )
+        if raw is None:
+            summaries = {"clinician_summary": "Summary unavailable — API key is not configured.", "patient_summary": ""}
+        else:
             start = raw.find("{")
             end = raw.rfind("}") + 1
             if start >= 0 and end > start:
@@ -652,12 +772,12 @@ def complete_session(session_id):
                     summaries = {"clinician_summary": raw, "patient_summary": ""}
             else:
                 summaries = {"clinician_summary": raw, "patient_summary": ""}
-        except Exception as e:
-            app.logger.error("LLM summary error: %s", e)
-            summaries = {
-                "clinician_summary": f"Summary generation failed: {str(e)[:200]}",
-                "patient_summary": "",
-            }
+    except Exception as e:
+        app.logger.error("LLM summary error: %s", e)
+        summaries = {
+            "clinician_summary": f"Summary generation failed: {str(e)[:200]}",
+            "patient_summary": "",
+        }
 
     session.clinician_summary = summaries.get("clinician_summary", "")
     session.patient_summary = summaries.get("patient_summary", "")
@@ -763,18 +883,14 @@ Rules:
 Text to translate:
 {text}"""
 
-    ai = get_llm_client()
-    if not ai:
-        return jsonify({"error": "API key not configured"}), 503
-
     try:
-        response = ai.chat.completions.create(
-            model=LLM_MODEL,
+        translated, _ = call_llm(
             messages=[{"role": "system", "content": prompt}],
             max_tokens=600,
             temperature=0.3,
         )
-        translated = response.choices[0].message.content
+        if translated is None:
+            return jsonify({"error": "API key not configured"}), 503
     except Exception as e:
         translated = f"[Translation failed: {str(e)[:100]}]"
 
@@ -832,6 +948,8 @@ with app.app_context():
         db.session.commit()
     except Exception:
         db.session.rollback()
+    # Ensure booking tables exist (idempotent via create_all above)
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    port = int(os.getenv("PORT", 5001))
+    app.run(debug=True, port=port)

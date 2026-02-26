@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MedBridge — Multilingual Healthcare Communication</title>
+    <title>MedBridge — Voice AI Pre-Consultation</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -19,9 +19,9 @@
     </div>
     <div class="topnav-links">
         <button class="nav-btn active" data-view="home" onclick="navigateTo('home')">Home</button>
-        <button class="nav-btn" data-view="patient" onclick="navigateTo('patient')">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            Patient Portal
+        <button class="nav-btn" data-view="checkin" onclick="navigateTo('checkin')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+            Book Appointment
         </button>
         <button class="nav-btn" data-view="doctor" onclick="navigateTo('doctor')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
@@ -47,34 +47,34 @@
 <section id="view-home" class="view active">
     <div class="hero">
         <div class="hero-content">
-            <h1>Bridging Language Barriers in Healthcare</h1>
-            <p class="hero-sub">AI-powered multilingual communication for Singapore &amp; Southeast Asia — enabling patients to speak in their language while doctors receive accurate English translations and clinical summaries.</p>
+            <h1>AI-Powered Voice Pre-Consultation</h1>
+            <p class="hero-sub">Patients speak with Aria, our multilingual voice AI, before seeing the doctor. Aria collects symptoms, history, and concerns — then sends a structured clinical summary directly to the Doctor Portal.</p>
         </div>
 
         <div class="portal-cards">
-            <div class="portal-card patient-card" onclick="navigateTo('patient')">
-                <div class="portal-icon patient-icon">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <div class="portal-card checkin-card" onclick="navigateTo('checkin')">
+                <div class="portal-icon checkin-icon">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                 </div>
-                <h2>Patient Portal</h2>
-                <p>Check in for your appointment or follow up after your visit. Speak in your preferred language — 华语, 福建话, 广东话, Malay, Tamil, and more.</p>
+                <h2>Book Appointment</h2>
+                <p>Speak with Aria before your appointment. Share your symptoms and medical history in your own language — completely hands-free.</p>
                 <ul class="portal-features">
-                    <li>Pre-consultation symptom check-in</li>
-                    <li>Post-consultation medication review</li>
-                    <li>Chat in 18 languages &amp; dialects</li>
+                    <li>Voice-driven symptom collection</li>
+                    <li>18 languages &amp; dialects supported</li>
+                    <li>Red-flag screening &amp; clinical summary</li>
                 </ul>
-                <span class="portal-cta">Enter Patient Portal &rarr;</span>
+                <span class="portal-cta">Book Appointment &rarr;</span>
             </div>
             <div class="portal-card doctor-card" onclick="navigateTo('doctor')">
                 <div class="portal-icon doctor-icon">
                     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                 </div>
                 <h2>Doctor Portal</h2>
-                <p>Review patient sessions with structured clinical summaries in English and bilingual conversation transcripts for translation verification.</p>
+                <p>Review structured clinical summaries from patient voice check-ins — with bilingual transcripts and red-flag alerts, all in English.</p>
                 <ul class="portal-features">
-                    <li>Clinical summaries in English</li>
-                    <li>Side-by-side translation view</li>
-                    <li>Full conversation transcripts</li>
+                    <li>Structured clinical summaries</li>
+                    <li>Bilingual conversation transcripts</li>
+                    <li>Urgency flags &amp; cultural context</li>
                 </ul>
                 <span class="portal-cta">Enter Doctor Portal &rarr;</span>
             </div>
@@ -90,132 +90,137 @@
             </div>
             <div class="feature-card">
                 <div class="feature-icon">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
                 </div>
-                <h3>Real-time Translation</h3>
-                <p>Every message translated to English instantly — doctors always understand the full picture</p>
+                <h3>Fully Voice-Driven</h3>
+                <p>Aria listens, speaks, and listens again — automatic turn-taking with no buttons required</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon">
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                 </div>
                 <h3>Clinical Summaries</h3>
-                <p>Structured reports with chief complaints, medications, red flags, and follow-up plans</p>
+                <p>Structured reports with chief complaints, medications, red flags, and cultural considerations</p>
             </div>
         </div>
     </div>
 </section>
 
-<!-- ===== VIEW: Patient Portal ===== -->
-<section id="view-patient" class="view">
-    <div class="portal-label patient-label">Patient Portal</div>
+<!-- ===== VIEW: Book Appointment (Voice AI Agent) ===== -->
+<section id="view-checkin" class="view">
+    <div class="portal-label checkin-label">Book Appointment</div>
 
-    <!-- Step: Registration -->
-    <div id="patient-register" class="patient-step active">
+    <!-- Step 1: Setup form -->
+    <div id="checkin-setup" class="checkin-step active">
         <div class="container-narrow">
             <div class="card card-elevated">
-                <div class="card-header">
-                    <h2>Welcome — Let's Get Started</h2>
-                    <p class="text-muted">Tell us a little about yourself so we can communicate in the language and way that works best for you.</p>
+                <div class="checkin-aria-avatar">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                 </div>
-                <form id="form-register" onsubmit="handleRegister(event)">
+                <div class="card-header" style="text-align:center">
+                    <h2>Meet Aria</h2>
+                    <p class="text-muted">Your AI voice assistant. Aria will ask about your symptoms and medical history before your appointment, then send a summary to your doctor.</p>
+                </div>
+                <form id="form-checkin" onsubmit="handleCheckinSetup(event)">
                     <div class="form-group">
-                        <label for="reg-name">Full Name <span class="required">*</span></label>
-                        <input type="text" id="reg-name" required placeholder="e.g. Ahmad bin Ibrahim" autocomplete="name">
+                        <label for="checkin-name">Full Name <span class="required">*</span></label>
+                        <input type="text" id="checkin-name" required placeholder="e.g. Ahmad bin Ibrahim" autocomplete="name">
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="reg-dob">Date of Birth</label>
-                            <input type="date" id="reg-dob">
+                            <label for="checkin-dob">Date of Birth</label>
+                            <input type="date" id="checkin-dob">
                         </div>
                         <div class="form-group">
-                            <label for="reg-language">Preferred Language <span class="required">*</span></label>
-                            <select id="reg-language" required onchange="updateDialects()"></select>
+                            <label for="checkin-language">Preferred Language <span class="required">*</span></label>
+                            <select id="checkin-language" required onchange="updateCheckinDialects()"></select>
                         </div>
                     </div>
                     <div class="form-group">
-                        <label for="reg-dialect">Dialect / Variant</label>
-                        <select id="reg-dialect"><option value="">— Select —</option></select>
+                        <label for="checkin-dialect">Dialect / Variant</label>
+                        <select id="checkin-dialect"><option value="">— Select —</option></select>
                     </div>
                     <div class="form-group">
-                        <label for="reg-cultural">Cultural Considerations <span class="text-muted">(optional)</span></label>
-                        <textarea id="reg-cultural" rows="3" placeholder="e.g. Halal dietary requirements; family makes health decisions together; prefers traditional medicine alongside Western treatment…"></textarea>
+                        <label for="checkin-cultural">Cultural Considerations <span class="text-muted">(optional)</span></label>
+                        <textarea id="checkin-cultural" rows="2" placeholder="e.g. Halal dietary requirements; family makes health decisions together…"></textarea>
                     </div>
-                    <div class="form-group">
-                        <label>Session Type <span class="required">*</span></label>
-                        <div class="radio-group">
-                            <label class="radio-card">
-                                <input type="radio" name="session-type" value="pre" checked>
-                                <div class="radio-card-body">
-                                    <strong>Pre-Consultation Check-In</strong>
-                                    <span>Share symptoms &amp; history before your appointment</span>
-                                </div>
-                            </label>
-                            <label class="radio-card">
-                                <input type="radio" name="session-type" value="post">
-                                <div class="radio-card-body">
-                                    <strong>Post-Consultation Follow-Up</strong>
-                                    <span>Review your visit, medications &amp; next steps</span>
-                                </div>
-                            </label>
-                        </div>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-block" id="btn-start-session">
-                        Begin Session
+                    <button type="submit" class="btn btn-checkin btn-block" id="btn-start-checkin">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+                        Book Appointment
                     </button>
+                    <p class="text-muted" style="font-size:0.8rem;text-align:center;margin-top:0.75rem;">You can also type your responses if you prefer.</p>
                 </form>
             </div>
         </div>
     </div>
 
-    <!-- Step: Chat -->
-    <div id="patient-chat" class="patient-step">
+    <!-- Step 2: Voice Conversation -->
+    <div id="checkin-chat" class="checkin-step">
         <div class="chat-container">
             <div class="chat-header">
                 <div class="chat-header-left">
-                    <button class="btn btn-icon" onclick="backToRegister()" title="Back">
+                    <button class="btn btn-icon" onclick="backToCheckinSetup()" title="Back">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
                     </button>
                     <div>
-                        <h3 id="chat-title">Session</h3>
-                        <span class="badge" id="chat-lang-badge">English</span>
-                        <span class="badge badge-outline" id="chat-type-badge">Pre-Consultation</span>
+                        <h3 id="checkin-chat-title">Aria — Voice Check-In</h3>
+                        <span class="badge checkin-badge" id="checkin-lang-badge">English</span>
+                        <span class="badge badge-outline">Pre-Consultation</span>
                     </div>
                 </div>
-                <button class="btn btn-success" id="btn-complete" onclick="completeSession()">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                    Complete &amp; Summarize
-                </button>
+                <div class="checkin-header-actions">
+                    <button class="btn btn-icon btn-sm" id="btn-auto-toggle" onclick="toggleAutoMode()" title="Toggle auto voice loop">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+                        <span id="auto-mode-label">Auto On</span>
+                    </button>
+                    <button class="btn btn-success" id="btn-send-to-doctor" onclick="completeCheckin()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        Send to Doctor
+                    </button>
+                </div>
             </div>
-            <div class="chat-messages" id="chat-messages"></div>
-            <div id="voice-status" class="voice-status">
+
+            <!-- Listening / speaking indicator -->
+            <div id="checkin-voice-indicator" class="checkin-voice-indicator hidden">
+                <div class="voice-pulse-ring"></div>
+                <div class="voice-pulse-ring delay-1"></div>
+                <div class="voice-pulse-ring delay-2"></div>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+                <span id="checkin-voice-status-text">Listening…</span>
+            </div>
+
+            <div class="chat-messages" id="checkin-messages"></div>
+
+            <div id="checkin-voice-status" class="voice-status">
                 <span class="voice-status-dot"></span>
-                <span id="voice-status-text">Listening…</span>
+                <span id="checkin-status-text">Listening…</span>
             </div>
+
             <div class="chat-input-bar">
-                <textarea id="chat-input" rows="1" placeholder="Type or tap the mic to speak…" onkeydown="handleChatKey(event)" oninput="autoResize(this)"></textarea>
-                <button class="btn btn-mic" id="btn-mic" onclick="toggleVoiceInput()" title="Speak your message">
+                <textarea id="checkin-input" rows="1" placeholder="Type or let Aria listen automatically…" onkeydown="handleCheckinKey(event)" oninput="autoResize(this)"></textarea>
+                <button class="btn btn-mic" id="btn-checkin-mic" onclick="toggleCheckinVoice()" title="Speak your response">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                 </button>
-                <button class="btn btn-primary btn-icon" id="btn-send" onclick="sendMessage()">
+                <button class="btn btn-primary btn-icon" id="btn-checkin-send" onclick="sendCheckinMessage()">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- Step: Patient Summary -->
-    <div id="patient-summary" class="patient-step">
+    <!-- Step 3: Summary (shown to patient after sending to doctor) -->
+    <div id="checkin-summary" class="checkin-step">
         <div class="container-narrow">
-            <div class="card card-elevated">
-                <div class="card-header">
-                    <h2>Your Visit Summary</h2>
-                    <p class="text-muted">Here is a summary of your session in your preferred language.</p>
+            <div class="card card-elevated checkin-confirm-card">
+                <div class="checkin-confirm-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                 </div>
-                <div id="patient-summary-content" class="summary-content"></div>
+                <h2>Sent to Your Doctor!</h2>
+                <p class="text-muted">Your check-in summary has been forwarded to the Doctor Portal. Here is a summary of what was shared:</p>
+                <div id="checkin-summary-content" class="summary-content"></div>
                 <div class="card-actions">
-                    <button class="btn btn-primary" onclick="backToRegister()">Start New Session</button>
-                    <button class="btn btn-outline" onclick="navigateTo('doctor')">View Doctor Portal</button>
+                    <button class="btn btn-checkin" onclick="backToCheckinSetup()">New Booking</button>
+                    <button class="btn btn-outline" onclick="navigateTo('home')">Back to Home</button>
                 </div>
             </div>
         </div>
@@ -228,7 +233,7 @@
     <div class="dashboard">
         <div class="dashboard-sidebar">
             <div class="sidebar-header">
-                <h3>Patients</h3>
+                <h3>Book Appointments</h3>
                 <button class="btn btn-sm btn-outline" onclick="loadSessions()" title="Refresh list">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                     Refresh
@@ -240,12 +245,6 @@
                     <option value="newest">Newest first</option>
                     <option value="name-az">Name (A–Z)</option>
                     <option value="name-za">Name (Z–A)</option>
-                </select>
-                <label class="sidebar-filter-label">Type</label>
-                <select id="filter-type" onchange="loadSessions()">
-                    <option value="">All Types</option>
-                    <option value="pre">Pre-Consultation</option>
-                    <option value="post">Post-Consultation</option>
                 </select>
                 <label class="sidebar-filter-label">Status</label>
                 <select id="filter-status" onchange="loadSessions()">
@@ -261,16 +260,16 @@
             </div>
             <div id="session-list" class="session-list">
                 <div class="empty-state">
-                    <p>No sessions yet.</p>
-                    <p class="text-muted">Sessions appear here once patients complete check-ins or follow-ups.</p>
+                    <p>No check-ins yet.</p>
+                    <p class="text-muted">Patient voice check-ins appear here once submitted.</p>
                 </div>
             </div>
         </div>
         <div class="dashboard-main" id="dashboard-main">
             <div class="empty-state-large">
                 <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                <h3>Select a Session</h3>
-                <p class="text-muted">Choose a session from the sidebar to view the clinical summary, bilingual conversation transcript, and patient information.</p>
+                <h3>Select a Patient</h3>
+                <p class="text-muted">Choose a patient check-in from the sidebar to view their clinical summary and voice conversation transcript.</p>
             </div>
         </div>
     </div>
@@ -281,60 +280,6 @@
     <div class="spinner"></div>
     <p id="spinner-text">Processing…</p>
 </div>
-
-<!-- ===== Patient Portal: Visual Accessibility Toolbar ===== -->
-<div id="a11y-toolbar-wrap" class="a11y-toolbar-wrap hidden" aria-label="Visual accessibility options">
-    <button type="button" id="a11y-toolbar-toggle" class="a11y-toolbar-toggle" onclick="toggleA11yPanel()" title="Open accessibility options">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-        <span>Accessibility</span>
-    </button>
-    <div id="a11y-panel" class="a11y-panel hidden">
-        <div class="a11y-panel-header">
-            <h4>Visual accessibility</h4>
-            <button type="button" class="a11y-panel-close" onclick="toggleA11yPanel()" aria-label="Close">×</button>
-        </div>
-        <div class="a11y-panel-body">
-            <div class="a11y-group">
-                <label>Screen magnifier</label>
-                <div class="a11y-options">
-                    <label class="a11y-option"><input type="radio" name="a11y-magnifier" value="off" checked> Off</label>
-                    <label class="a11y-option"><input type="radio" name="a11y-magnifier" value="125"> 125%</label>
-                    <label class="a11y-option"><input type="radio" name="a11y-magnifier" value="150"> 150%</label>
-                    <label class="a11y-option"><input type="radio" name="a11y-magnifier" value="200"> 200%</label>
-                    <label class="a11y-option"><input type="radio" name="a11y-magnifier" value="loupe"> Loupe</label>
-                </div>
-            </div>
-            <div class="a11y-group">
-                <label>Color theme</label>
-                <div class="a11y-options">
-                    <label class="a11y-option"><input type="radio" name="a11y-theme" value="default" checked> Default</label>
-                    <label class="a11y-option"><input type="radio" name="a11y-theme" value="high-contrast-light"> High contrast (light)</label>
-                    <label class="a11y-option"><input type="radio" name="a11y-theme" value="high-contrast-dark"> High contrast (dark)</label>
-                </div>
-            </div>
-            <div class="a11y-group">
-                <label>Text size</label>
-                <div class="a11y-options">
-                    <label class="a11y-option"><input type="radio" name="a11y-text" value="normal" checked> Normal</label>
-                    <label class="a11y-option"><input type="radio" name="a11y-text" value="large"> Large</label>
-                </div>
-            </div>
-            <div class="a11y-group">
-                <label class="a11y-check">
-                    <input type="checkbox" name="a11y-reduced-motion">
-                    <span>Reduce motion</span>
-                </label>
-            </div>
-            <div class="a11y-group">
-                <label class="a11y-check">
-                    <input type="checkbox" name="a11y-focus-visible">
-                    <span>Strong focus outline</span>
-                </label>
-            </div>
-        </div>
-    </div>
-</div>
-<div id="a11y-loupe" class="a11y-loupe hidden" aria-hidden="true"></div>
 
 <script src="/app.js"></script>
 </body>

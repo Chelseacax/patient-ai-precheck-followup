@@ -196,6 +196,9 @@ body {
     margin-bottom: var(--space-12);
     text-align: left;
 }
+@media (max-width: 640px) {
+    .portal-cards { grid-template-columns: 1fr; }
+}
 
 .portal-card {
     background: var(--color-surface);
@@ -1350,3 +1353,152 @@ body.a11y-theme-high-contrast-light.a11y-focus-visible *:focus-visible {
 body.a11y-theme-high-contrast-dark.a11y-focus-visible *:focus-visible {
     outline-color: #6eb3ff !important;
 }
+
+/* ==========================================================================
+   Voice Pre-Consultation Check-In
+   ========================================================================== */
+
+/* Portal label */
+.checkin-label {
+    background: var(--color-patient-light);
+    color: var(--color-patient-dark);
+    border-bottom: 2px solid var(--color-patient);
+}
+
+/* Nav button */
+.nav-btn[data-view="checkin"].active {
+    background: var(--color-patient);
+    color: #fff;
+}
+.nav-btn[data-view="checkin"]:hover:not(.active) {
+    background: var(--color-patient-light);
+    color: var(--color-patient-dark);
+}
+
+/* Portal card */
+.checkin-card::before { background: linear-gradient(90deg, var(--color-patient), #34d399); }
+.checkin-card:hover { border-color: var(--color-patient); }
+.checkin-icon {
+    background: var(--color-patient-light);
+    color: var(--color-patient-dark);
+}
+.checkin-icon svg { stroke: var(--color-patient-dark); }
+
+/* Check-in steps */
+.checkin-step { display: none; }
+.checkin-step.active { display: block; }
+
+/* Aria avatar on setup card */
+.checkin-aria-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: var(--color-patient-light);
+    border: 3px solid var(--color-patient);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto var(--space-4);
+    color: var(--color-patient-dark);
+}
+.checkin-aria-avatar svg { stroke: var(--color-patient-dark); }
+
+/* Check-in primary button */
+.btn-checkin {
+    background: var(--color-patient);
+    color: #fff;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-6);
+    border-radius: var(--radius-full);
+    font-weight: 600;
+    font-size: var(--font-size-base);
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+}
+.btn-checkin:hover { background: var(--color-patient-dark); transform: translateY(-1px); }
+.btn-checkin.btn-block { width: 100%; justify-content: center; }
+
+/* Chat header actions */
+.checkin-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+.checkin-badge { background: var(--color-patient); color: #fff; }
+
+/* Auto-mode toggle button */
+#btn-auto-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    background: var(--color-patient-light);
+    border: 1.5px solid var(--color-patient);
+    color: var(--color-patient-dark);
+    border-radius: var(--radius-full);
+    padding: var(--space-1) var(--space-3);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+#btn-auto-toggle.auto-off {
+    background: var(--color-surface);
+    border-color: var(--color-border);
+    color: var(--color-muted);
+}
+
+/* Voice pulse indicator */
+.checkin-voice-indicator {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-6);
+    background: var(--color-patient-light);
+    border-bottom: 1px solid rgba(16,185,129,0.2);
+    color: var(--color-patient-dark);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+}
+.checkin-voice-indicator.hidden { display: none; }
+.checkin-voice-indicator svg { stroke: var(--color-patient); }
+.voice-pulse-ring {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid var(--color-patient);
+    animation: pulse-ring 1.5s ease-out infinite;
+    opacity: 0;
+}
+.voice-pulse-ring.delay-1 { animation-delay: 0.5s; }
+.voice-pulse-ring.delay-2 { animation-delay: 1s; }
+@keyframes pulse-ring {
+    0%   { transform: translate(-50%, -50%) scale(0.8); opacity: 0.6; }
+    100% { transform: translate(-50%, -50%) scale(2.4); opacity: 0; }
+}
+
+/* Check-in confirmation card */
+.checkin-confirm-card {
+    text-align: center;
+    padding: var(--space-10) var(--space-8);
+}
+.checkin-confirm-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: var(--color-patient-light);
+    border: 3px solid var(--color-patient);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto var(--space-6);
+}
+.checkin-confirm-icon svg { stroke: var(--color-patient); }
