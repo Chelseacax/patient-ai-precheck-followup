@@ -27,6 +27,7 @@ const SPEECH_LANG_MAP = {
     'my':            'my-MM',
     'bn':            'bn-BD',
     'km':            'km-KH',
+    'lo':            'lo-LA',
 };
 
 // ---------------------------------------------------------------------------
@@ -66,9 +67,12 @@ function navigateTo(view) {
 
     if (view === 'doctor') loadSessions();
     if (view === 'checkin') showCheckinStep('checkin-setup');
+    if (view === 'booking') showBookingStep('booking-setup');
 
     stopCheckinSpeaking();
     stopCheckinVoice();
+    stopBookingSpeaking();
+    stopBookingVoice();
 }
 
 function showCheckinStep(stepId) {
@@ -85,6 +89,7 @@ async function init() {
         const res = await fetch(`${API}/api/languages`);
         state.languages = await res.json();
         populateCheckinLanguageDropdown();
+        populateBookingLanguageDropdown();
     } catch (e) {
         console.error('Failed to load languages', e);
     }
@@ -100,7 +105,7 @@ async function checkApiKey() {
             banner.classList.remove('hidden');
             if (data.api_key_set && data.api_key_valid === false) {
                 banner.querySelector('span').innerHTML =
-                    '<strong>Your API key is invalid or expired.</strong> Please enter a valid OpenAI (sk-...) or Groq (gsk_...) API key.';
+                    '<strong>Your API key is invalid or expired.</strong> Please enter a valid MERaLion, OpenAI (sk-...), or Groq (gsk_...) API key.';
             }
         } else {
             banner.classList.add('hidden');
@@ -113,7 +118,7 @@ async function checkApiKey() {
 async function saveApiKey() {
     const input = document.getElementById('api-key-input');
     const key = input.value.trim();
-    if (!key) { alert('Please enter an API key (OpenAI sk-... or Groq gsk_...).'); return; }
+    if (!key) { alert('Please enter an API key (MERaLion, OpenAI sk-..., or Groq gsk_...).'); return; }
 
     input.disabled = true;
     try {
@@ -768,6 +773,416 @@ function formatSummaryHtml(text) {
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/^• /gm, '<span style="color:var(--color-doctor)">&#9679;</span> ');
     return html;
+}
+
+// ---------------------------------------------------------------------------
+// Booking Agent — State
+// ---------------------------------------------------------------------------
+
+let bookingState = {
+    patientId: null,
+    bookingSessionId: null,
+    langCode: 'en',
+    langName: 'English',
+    isAutoMode: true,
+    isSpeaking: false,
+    isListening: false,
+    selectedSlotId: null,
+};
+
+let bookingRec = null;
+let bookingUtterance = null;
+
+// ---------------------------------------------------------------------------
+// Booking Agent — Language Dropdowns
+// ---------------------------------------------------------------------------
+
+function populateBookingLanguageDropdown() {
+    const sel = document.getElementById('booking-language');
+    if (!sel) return;
+    sel.innerHTML = '';
+    Object.keys(state.languages).forEach(lang => {
+        const opt = document.createElement('option');
+        opt.value = lang;
+        opt.textContent = lang;
+        if (lang === 'English') opt.selected = true;
+        sel.appendChild(opt);
+    });
+    updateBookingDialects();
+}
+
+function updateBookingDialects() {
+    const lang = document.getElementById('booking-language').value;
+    const dialectSel = document.getElementById('booking-dialect');
+    dialectSel.innerHTML = '<option value="">— Select —</option>';
+    const dialects = (state.languages[lang] || {}).dialects || [];
+    dialects.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d;
+        opt.textContent = d;
+        dialectSel.appendChild(opt);
+    });
+    bookingState.langCode = (state.languages[lang] || {}).code || 'en';
+    bookingState.langName = lang;
+}
+
+// ---------------------------------------------------------------------------
+// Booking Agent — Setup
+// ---------------------------------------------------------------------------
+
+async function handleBookingSetup(event) {
+    event.preventDefault();
+    const name     = document.getElementById('booking-name').value.trim();
+    const language = document.getElementById('booking-language').value;
+    const dialect  = document.getElementById('booking-dialect').value;
+
+    if (!name) { alert('Please enter your name.'); return; }
+
+    const btn = document.getElementById('btn-start-booking');
+    btn.disabled = true;
+    btn.textContent = 'Starting…';
+
+    try {
+        const res = await fetch(`${API}/api/booking/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, language, dialect }),
+        });
+        const data = await res.json();
+        if (!res.ok) { alert(data.error || 'Failed to start booking.'); return; }
+
+        bookingState.patientId       = data.patient_id;
+        bookingState.bookingSessionId = data.booking_session_id;
+        bookingState.langName        = language;
+        bookingState.langCode        = (state.languages[language] || {}).code || 'en';
+
+        document.getElementById('booking-chat-title').textContent = `Aria — ${escapeHtml(data.patient_name)}`;
+        document.getElementById('booking-lang-badge').textContent = language + (dialect ? ` · ${dialect}` : '');
+        document.getElementById('booking-messages').innerHTML = '';
+        document.getElementById('booking-state-card').classList.add('hidden');
+
+        showBookingStep('booking-chat');
+        appendBookingBubble('assistant', data.welcome_message);
+        bookingSpeakThenListen(data.welcome_message);
+
+    } catch (err) {
+        alert('Failed to start booking. Please check your connection.');
+        console.error(err);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg> Start Voice Booking';
+    }
+}
+
+function showBookingStep(stepId) {
+    // Only toggle steps within view-booking
+    document.querySelectorAll('#view-booking .checkin-step').forEach(s => s.classList.remove('active'));
+    document.getElementById(stepId).classList.add('active');
+}
+
+function backToBookingSetup() {
+    stopBookingSpeaking();
+    stopBookingVoice();
+    showBookingStep('booking-setup');
+}
+
+// ---------------------------------------------------------------------------
+// Booking Agent — Send Message
+// ---------------------------------------------------------------------------
+
+async function sendBookingMessage(overrideText) {
+    const input = document.getElementById('booking-input');
+    const text = (overrideText !== undefined ? overrideText : input.value).trim();
+    if (!text || !bookingState.bookingSessionId) return;
+
+    input.value = '';
+    input.style.height = '';
+    stopBookingVoice();
+
+    appendBookingBubble('user', text);
+    setBookingStatus('Processing…');
+
+    try {
+        const res = await fetch(`${API}/api/booking/${bookingState.bookingSessionId}/message`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text }),
+        });
+        const data = await res.json();
+
+        appendBookingBubble('assistant', data.response_text);
+        renderBookingStateCard(data);
+
+        if (data.state === 'confirmed') {
+            showBookingConfirmed(data);
+            return;
+        }
+        if (data.state === 'cancelled') {
+            appendBookingBubble('assistant', 'Your booking has been cancelled. Feel free to start a new one.');
+            return;
+        }
+
+        bookingSpeakThenListen(data.response_text);
+
+    } catch (err) {
+        appendBookingBubble('assistant', '[Error communicating with server. Please try again.]');
+        console.error(err);
+    }
+}
+
+function handleBookingKey(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendBookingMessage();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Booking Agent — State Card
+// ---------------------------------------------------------------------------
+
+function renderBookingStateCard(data) {
+    const card = document.getElementById('booking-state-card');
+
+    // Show normalized input
+    const normalizedRow = document.getElementById('booking-normalized-row');
+    const normalizedText = document.getElementById('booking-normalized-text');
+    if (data.normalized_input) {
+        normalizedText.textContent = data.normalized_input;
+        normalizedRow.classList.remove('hidden');
+    } else {
+        normalizedRow.classList.add('hidden');
+    }
+
+    // Show available slots
+    const slotsList = document.getElementById('booking-slots-list');
+    slotsList.innerHTML = '';
+    bookingState.selectedSlotId = null;
+
+    if (data.available_slots && data.available_slots.length > 0) {
+        data.available_slots.forEach((slot, i) => {
+            const item = document.createElement('div');
+            item.className = 'booking-slot-item' + (i === 0 ? ' selected' : '');
+            if (i === 0) bookingState.selectedSlotId = slot.id;
+            item.innerHTML = `
+                <div>
+                    <div class="booking-slot-doctor">${escapeHtml(slot.doctor_name)}</div>
+                    <div class="booking-slot-specialty">${escapeHtml(slot.specialty)}</div>
+                </div>
+                <div class="booking-slot-datetime">
+                    <div>${escapeHtml(slot.slot_date)}</div>
+                    <div>${escapeHtml(slot.slot_time)}</div>
+                </div>`;
+            item.onclick = () => {
+                document.querySelectorAll('.booking-slot-item').forEach(el => el.classList.remove('selected'));
+                item.classList.add('selected');
+                bookingState.selectedSlotId = slot.id;
+            };
+            slotsList.appendChild(item);
+        });
+        card.classList.remove('hidden');
+    }
+
+    // Show confirm/cancel buttons when confirming
+    const confirmActions = document.getElementById('booking-confirm-actions');
+    if (data.requires_confirmation) {
+        confirmActions.classList.remove('hidden');
+        card.classList.remove('hidden');
+    } else {
+        confirmActions.classList.add('hidden');
+    }
+
+    if (!data.normalized_input && (!data.available_slots || data.available_slots.length === 0)) {
+        card.classList.add('hidden');
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Booking Agent — Confirm / Cancel
+// ---------------------------------------------------------------------------
+
+async function confirmBooking() {
+    if (!bookingState.bookingSessionId) return;
+    try {
+        const res = await fetch(`${API}/api/booking/${bookingState.bookingSessionId}/confirm`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await res.json();
+        if (!res.ok) { alert(data.error || 'Failed to confirm booking.'); return; }
+        showBookingConfirmed(data);
+    } catch (err) {
+        alert('Failed to confirm booking. Please try again.');
+        console.error(err);
+    }
+}
+
+async function cancelBookingSession() {
+    if (!bookingState.bookingSessionId) return;
+    await fetch(`${API}/api/booking/${bookingState.bookingSessionId}/cancel`, { method: 'POST' });
+    document.getElementById('booking-state-card').classList.add('hidden');
+    appendBookingBubble('assistant', 'Booking cancelled. Let me know if you\'d like to try again.');
+    bookingSpeakThenListen('Booking cancelled. Let me know if you\'d like to try again with different preferences.');
+}
+
+function showBookingConfirmed(data) {
+    stopBookingSpeaking();
+    stopBookingVoice();
+
+    const ref = data.booking_ref || '';
+    const details = document.getElementById('booking-confirmed-details');
+    details.innerHTML = `
+        <div class="booking-ref">${escapeHtml(ref)}</div>
+        <div class="detail-row"><span class="detail-label">Doctor</span><span class="detail-value">${escapeHtml(data.doctor_name || '')}</span></div>
+        <div class="detail-row"><span class="detail-label">Specialty</span><span class="detail-value">${escapeHtml(data.specialty || '')}</span></div>
+        <div class="detail-row"><span class="detail-label">Date</span><span class="detail-value">${escapeHtml(data.slot_date || '')}</span></div>
+        <div class="detail-row"><span class="detail-label">Time</span><span class="detail-value">${escapeHtml(data.slot_time || '')}</span></div>`;
+
+    showBookingStep('booking-confirmed');
+
+    const msg = `Your appointment has been confirmed. Your booking reference is ${ref}. See you at ${data.slot_time} on ${data.slot_date}.`;
+    bookingSpeakThenListen(msg);
+}
+
+// ---------------------------------------------------------------------------
+// Booking Agent — Voice (TTS + STT)
+// ---------------------------------------------------------------------------
+
+function bookingSpeakThenListen(text) {
+    stopBookingSpeaking();
+    const indicator = document.getElementById('booking-voice-indicator');
+    const statusText = document.getElementById('booking-voice-status-text');
+
+    if (!window.speechSynthesis) {
+        setBookingStatus('Ready');
+        if (bookingState.isAutoMode) setTimeout(startBookingListening, 400);
+        return;
+    }
+
+    bookingUtterance = new SpeechSynthesisUtterance(text);
+    const bcp47 = SPEECH_LANG_MAP[bookingState.langCode] || 'en-SG';
+    bookingUtterance.lang = bcp47;
+    bookingUtterance.rate = 0.9;
+
+    const voices = window.speechSynthesis.getVoices();
+    const match = voices.find(v => v.lang.startsWith(bcp47.split('-')[0]));
+    if (match) bookingUtterance.voice = match;
+
+    bookingUtterance.onstart = () => {
+        bookingState.isSpeaking = true;
+        indicator.classList.remove('hidden');
+        statusText.textContent = 'Aria is speaking…';
+        setBookingStatus('Speaking…');
+    };
+    bookingUtterance.onend = () => {
+        bookingState.isSpeaking = false;
+        indicator.classList.add('hidden');
+        if (bookingState.isAutoMode) setTimeout(startBookingListening, 400);
+    };
+    bookingUtterance.onerror = () => {
+        bookingState.isSpeaking = false;
+        indicator.classList.add('hidden');
+    };
+
+    window.speechSynthesis.speak(bookingUtterance);
+}
+
+function stopBookingSpeaking() {
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    bookingState.isSpeaking = false;
+    const indicator = document.getElementById('booking-voice-indicator');
+    if (indicator) indicator.classList.add('hidden');
+}
+
+function startBookingListening() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) { setBookingStatus('Voice not supported in this browser.'); return; }
+    if (bookingState.isListening) return;
+
+    stopBookingVoice();
+
+    const bcp47 = SPEECH_LANG_MAP[bookingState.langCode] || 'en-SG';
+    bookingRec = new SpeechRecognition();
+    bookingRec.lang = bcp47;
+    bookingRec.continuous = false;
+    bookingRec.interimResults = true;
+
+    const indicator = document.getElementById('booking-voice-indicator');
+    const statusText = document.getElementById('booking-voice-status-text');
+    const input = document.getElementById('booking-input');
+    let finalTranscript = '';
+
+    bookingRec.onstart = () => {
+        bookingState.isListening = true;
+        indicator.classList.remove('hidden');
+        statusText.textContent = 'Listening…';
+        setBookingStatus('Listening…');
+        document.getElementById('btn-booking-mic').classList.add('active');
+    };
+    bookingRec.onresult = (e) => {
+        let interim = '';
+        finalTranscript = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+            if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript;
+            else interim += e.results[i][0].transcript;
+        }
+        input.value = finalTranscript || interim;
+    };
+    bookingRec.onend = () => {
+        bookingState.isListening = false;
+        indicator.classList.add('hidden');
+        setBookingStatus('Ready');
+        document.getElementById('btn-booking-mic').classList.remove('active');
+        if (bookingState.isAutoMode && finalTranscript.trim()) {
+            setTimeout(() => sendBookingMessage(finalTranscript.trim()), 300);
+        }
+    };
+    bookingRec.onerror = (e) => {
+        bookingState.isListening = false;
+        indicator.classList.add('hidden');
+        document.getElementById('btn-booking-mic').classList.remove('active');
+        if (e.error === 'not-allowed') alert('Microphone access denied. Please allow microphone access.');
+    };
+
+    bookingRec.start();
+}
+
+function stopBookingVoice() {
+    if (bookingRec) { try { bookingRec.stop(); } catch (_) {} bookingRec = null; }
+    bookingState.isListening = false;
+    const indicator = document.getElementById('booking-voice-indicator');
+    if (indicator) indicator.classList.add('hidden');
+    const btn = document.getElementById('btn-booking-mic');
+    if (btn) btn.classList.remove('active');
+}
+
+function toggleBookingVoice() {
+    if (bookingState.isListening) stopBookingVoice();
+    else startBookingListening();
+}
+
+function toggleBookingAutoMode() {
+    bookingState.isAutoMode = !bookingState.isAutoMode;
+    document.getElementById('booking-auto-mode-label').textContent =
+        bookingState.isAutoMode ? 'Auto On' : 'Auto Off';
+}
+
+// ---------------------------------------------------------------------------
+// Booking Agent — UI helpers
+// ---------------------------------------------------------------------------
+
+function appendBookingBubble(role, text) {
+    const container = document.getElementById('booking-messages');
+    const bubble = document.createElement('div');
+    bubble.className = `message-bubble ${role === 'user' ? 'user-bubble' : 'assistant-bubble'}`;
+    bubble.innerHTML = `<div class="message-content">${escapeHtml(text)}</div>`;
+    container.appendChild(bubble);
+    container.scrollTop = container.scrollHeight;
+}
+
+function setBookingStatus(text) {
+    const el = document.getElementById('booking-status-text');
+    if (el) el.textContent = text;
 }
 
 // ---------------------------------------------------------------------------

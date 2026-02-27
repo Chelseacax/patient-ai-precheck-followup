@@ -147,6 +147,87 @@ body {
 }
 
 /* ==========================================================================
+   Booking Agent State Card
+   ========================================================================== */
+
+.booking-state-card {
+    margin: 0 1rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    background: var(--color-surface);
+    overflow: hidden;
+}
+.booking-state-card.hidden { display: none; }
+
+.booking-normalized {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: #f0f7ff;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.85rem;
+}
+.booking-normalized.hidden { display: none; }
+.booking-state-label {
+    font-weight: 600;
+    color: var(--color-primary);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.booking-normalized-text { color: var(--color-text); }
+
+.booking-slots-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+.booking-slot-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: background 0.15s;
+    font-size: 0.875rem;
+}
+.booking-slot-item:last-child { border-bottom: none; }
+.booking-slot-item:hover { background: #f5f9ff; }
+.booking-slot-item.selected { background: #e8f3ff; border-left: 3px solid var(--color-primary); }
+.booking-slot-doctor { font-weight: 600; color: var(--color-text); }
+.booking-slot-specialty { font-size: 0.78rem; color: var(--color-muted); }
+.booking-slot-datetime { font-size: 0.82rem; color: var(--color-primary); text-align: right; }
+
+.booking-confirm-actions {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--color-border);
+}
+.booking-confirm-actions.hidden { display: none; }
+
+.booking-confirmed-details {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 1.25rem;
+    margin: 1rem 0;
+    text-align: left;
+}
+.booking-confirmed-details .detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.9rem;
+}
+.booking-confirmed-details .detail-row:last-child { border-bottom: none; }
+.booking-confirmed-details .detail-label { color: var(--color-muted); }
+.booking-confirmed-details .detail-value { font-weight: 600; }
+.booking-ref { font-size: 1.4rem; font-weight: 700; color: var(--color-primary); letter-spacing: 2px; text-align: center; margin: 0.5rem 0 1rem; }
+
+/* ==========================================================================
    Views
    ========================================================================== */
 
