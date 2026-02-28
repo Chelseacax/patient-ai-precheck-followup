@@ -59,10 +59,10 @@ def _resolve_provider():
         }
     if sealion_key:
         return {
-            "type": "openai_compat", "name": "MERaLion",
+            "type": "openai_compat", "name": "SEA-LION",
             "api_key": sealion_key,
             "base_url": "https://api.sea-lion.ai/v1",
-            "model": os.getenv("LLM_MODEL", "aisingapore/MERaLion-3-8B-IT"),
+            "model": os.getenv("LLM_MODEL", "aisingapore/gemma3-12b-it"),
         }
     if groq_key:
         return {
@@ -205,29 +205,6 @@ class Message(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
-
-class AppointmentSlot(db.Model):
-    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    doctor_name = db.Column(db.String(120), nullable=False)
-    specialty = db.Column(db.String(80), nullable=False)
-    slot_datetime = db.Column(db.DateTime, nullable=False)
-    is_available = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-
-
-class BookingSession(db.Model):
-    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    patient_id = db.Column(db.String(36), db.ForeignKey("patient.id"), nullable=False)
-    state = db.Column(db.String(20), default="collecting")  # collecting|confirming|confirmed|cancelled
-    normalized_input = db.Column(db.Text)
-    extracted_slots = db.Column(db.Text)   # JSON string
-    appointment_slot_id = db.Column(db.String(36), db.ForeignKey("appointment_slot.id"), nullable=True)
-    language = db.Column(db.String(50), default="English")
-    dialect = db.Column(db.String(80), default="")
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    completed_at = db.Column(db.DateTime)
-
-
 # ---------------------------------------------------------------------------
 # Language & Cultural Configuration — Singapore / Southeast Asia
 # ---------------------------------------------------------------------------
@@ -250,7 +227,32 @@ SUPPORTED_LANGUAGES = {
         "dialects": ["Singapore Tamil (சிங்கப்பூர் தமிழ்)", "Standard Tamil (நிலைத்தமிழ்)"],
         "code": "ta",
     },
+    # --- Singapore Chinese Dialects ---
+    "福建话 (Hokkien)": {
+        "dialects": ["新加坡福建话 (Singapore Hokkien)", "槟城福建话 (Penang Hokkien)"],
+        "code": "zh-hokkien",
+    },
+    "潮州话 (Teochew)": {
+        "dialects": ["新加坡潮州话 (Singapore Teochew)"],
+        "code": "zh-teochew",
+    },
+    "广东话 (Cantonese)": {
+        "dialects": ["新加坡广东话 (Singapore Cantonese)", "香港广东话 (Hong Kong Cantonese)"],
+        "code": "zh-cantonese",
+    },
+    "客家话 (Hakka)": {
+        "dialects": ["新加坡客家话 (Singapore Hakka)"],
+        "code": "zh-hakka",
+    },
+    "海南话 (Hainanese)": {
+        "dialects": ["新加坡海南话 (Singapore Hainanese)"],
+        "code": "zh-hainanese",
+    },
     # --- Southeast Asian Languages ---
+    "Hindi (हिन्दी)": {
+        "dialects": ["Standard Hindi", "Colloquial Hindi"],
+        "code": "hi",
+    },
     "Tagalog (Filipino)": {
         "dialects": ["Standard Filipino", "Taglish"],
         "code": "tl",
@@ -271,18 +273,25 @@ SUPPORTED_LANGUAGES = {
         "dialects": ["Standard Burmese", "Colloquial Burmese"],
         "code": "my",
     },
+    "Bengali (বাংলা)": {
+        "dialects": ["Standard Bengali", "Bangladeshi Bengali"],
+        "code": "bn",
+    },
     "Khmer (ភាសាខ្មែរ)": {
         "dialects": ["Standard Khmer", "Colloquial Khmer"],
         "code": "km",
     },
-    "Lao (ພາສາລາວ)": {
-        "dialects": ["Standard Lao", "Colloquial Lao"],
-        "code": "lo",
-    },
 }
 
-# All languages in SUPPORTED_LANGUAGES are handled by MERaLion.
-LANGUAGES_SKIP_ENGLISH_TRANSLATION = frozenset()
+# Languages/dialects that typical LLMs do not support well for translation.
+# For these we do not generate an English translation (doctor sees original only).
+LANGUAGES_SKIP_ENGLISH_TRANSLATION = frozenset({
+    "福建话 (Hokkien)",
+    "潮州话 (Teochew)",
+    "广东话 (Cantonese)",
+    "客家话 (Hakka)",
+    "海南话 (Hainanese)",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -451,8 +460,6 @@ def config_status():
                 api_key_valid = False
             except Exception:
                 api_key_valid = True   # transient error — assume valid
-    elif provider["name"] == "MERaLion":
-        api_key_valid = True   # MERaLion API does not expose a /models endpoint
     else:
         try:
             oa_kwargs = {"api_key": key}
@@ -501,7 +508,7 @@ def set_api_key():
     elif key.startswith("gsk_") or provider_hint == "groq":
         env_var      = "GROQ_API_KEY"
         provider_type = "groq"
-    elif key.startswith("sl-") or key.startswith("chelsea-") or provider_hint == "sealion":
+    elif key.startswith("sl-") or provider_hint == "sealion":
         env_var      = "SEALION_API_KEY"
         provider_type = "sealion"
     else:
@@ -902,179 +909,17 @@ def _fallback_greeting(language, name, session_type):
         "华语 (Mandarin)": f"你好 {name}！欢迎。我在这里帮助您进行{'问诊前登记' if pre else '就诊后随访'}。您今天感觉怎么样？",
         "Malay (Bahasa Melayu)": f"Selamat datang {name}! Saya di sini untuk membantu anda dengan {'pendaftaran pra-konsultasi' if pre else 'tindakan susulan'}. Bagaimana perasaan anda hari ini?",
         "Tamil (தமிழ்)": f"வணக்கம் {name}! வரவேற்கிறோம். உங்கள் {'முன்-ஆலோசனை பதிவு' if pre else 'பின்-ஆலோசனை தொடர்'}க்கு நான் உதவ இருக்கிறேன். இன்று எப்படி உணர்கிறீர்கள்?",
-        "Tagalog (Filipino)": f"Kumusta {name}! Maligayang pagdating. Nandito ako para tulungan ka sa iyong {'pre-consultation check-in' if pre else 'post-consultation follow-up'}. Kamusta ang pakiramdam mo ngayon?",
+        "福建话 (Hokkien)": f"你好 {name}！歡迎。我在這裡幫助你{'看醫生之前登記' if pre else '看完醫生後跟進'}。你今天感覺怎樣？",
+        "潮州话 (Teochew)": f"你好 {name}！歡迎。我在這裡幫助你{'看醫生之前登記' if pre else '看完醫生後跟進'}。你今日感覺怎樣？",
+        "广东话 (Cantonese)": f"你好 {name}！歡迎。我喺度幫你{'睇醫生之前登記' if pre else '睇完醫生之後跟進'}。你今日覺得點樣？",
+        "客家话 (Hakka)": f"你好 {name}！歡迎。我在這裡幫你{'看醫生之前登記' if pre else '看完醫生後跟進'}。你今日感覺怎樣？",
+        "海南话 (Hainanese)": f"你好 {name}！歡迎。我在這裡幫你{'看醫生之前登記' if pre else '看完醫生後跟進'}。你今日身體怎樣？",
+        "Hindi (हिन्दी)": f"नमस्ते {name}! स्वागत है। मैं आपकी {'जाँच-पूर्व पंजीकरण' if pre else 'परामर्श के बाद अनुवर्ती'} में मदद के लिए यहाँ हूँ। आज आप कैसा महसूस कर रहे हैं?",
         "Vietnamese (Tiếng Việt)": f"Xin chào {name}! Chào mừng bạn. Tôi ở đây để giúp bạn với {'đăng ký trước khám' if pre else 'theo dõi sau khám'}. Hôm nay bạn cảm thấy thế nào?",
         "Thai (ภาษาไทย)": f"สวัสดีค่ะ/ครับ {name}! ยินดีต้อนรับ ฉันอยู่ที่นี่เพื่อช่วยคุณ{'ลงทะเบียนก่อนพบแพทย์' if pre else 'ติดตามผลหลังพบแพทย์'} วันนี้คุณรู้สึกอย่างไรบ้าง?",
-        "Bahasa Indonesia": f"Selamat datang {name}! Saya di sini untuk membantu Anda dengan {'pendaftaran pra-konsultasi' if pre else 'tindak lanjut pasca-konsultasi'}. Bagaimana perasaan Anda hari ini?",
-        "Burmese (မြန်မာဘာသာ)": f"မင်္ဂလာပါ {name}! ကြိုဆိုပါတယ်။ သင့်ရဲ့ {'ဆေးကုမခံယူမီ မှတ်ပုံတင်ခြင်း' if pre else 'ဆေးကုပြီးနောက် ဆက်လက်ကျန်းမာရေး စစ်ဆေးခြင်း'}အတွက် ကူညီဖို့ ဒီမှာ ရောက်နေပါတယ်။ ဒီနေ့ ဘယ်လိုခံစားရလဲ?",
-        "Khmer (ភាសាខ្មែរ)": f"សួស្តី {name}! សូមស្វាគមន៍។ ខ្ញុំនៅទីនេះដើម្បីជួយអ្នកជាមួយ{'ការចុះឈ្មោះមុនពិគ្រោះ' if pre else 'ការតាមដានក្រោយពិគ្រោះ'}។ តើអ្នកមានអារម្មណ៍យ៉ាងណាថ្ងៃនេះ?",
-        "Lao (ພາສາລາວ)": f"ສະບາຍດີ {name}! ຍິນດີຕ້ອນຮັບ. ຂ້ອຍຢູ່ທີ່ນີ້ເພື່ອຊ່ວຍທ່ານໃນ{'ການລົງທະບຽນກ່ອນປຶກສາແພດ' if pre else 'ການຕິດຕາມຫຼັງປຶກສາແພດ'}. ມື້ນີ້ທ່ານຮູ້ສຶກແນວໃດ?",
+        "Tagalog (Filipino)": f"Kumusta {name}! Maligayang pagdating. Nandito ako para tulungan ka sa iyong {'pre-consultation check-in' if pre else 'post-consultation follow-up'}. Kamusta ang pakiramdam mo ngayon?",
     }
     return greetings.get(language, greetings["English"])
-
-
-# ---------------------------------------------------------------------------
-# API Routes — Voice Booking Agent
-# ---------------------------------------------------------------------------
-
-@app.route("/api/booking/slots", methods=["GET"])
-def list_booking_slots():
-    """Return all available appointment slots."""
-    slots = AppointmentSlot.query.filter_by(is_available=True).order_by(AppointmentSlot.slot_datetime).all()
-    return jsonify([{
-        "id": s.id,
-        "doctor_name": s.doctor_name,
-        "specialty": s.specialty,
-        "slot_date": s.slot_datetime.strftime("%A, %d %B %Y"),
-        "slot_time": s.slot_datetime.strftime("%I:%M %p"),
-        "slot_datetime_iso": s.slot_datetime.isoformat(),
-        "is_available": s.is_available,
-    } for s in slots])
-
-
-@app.route("/api/booking/start", methods=["POST"])
-def start_booking():
-    """
-    Start a new booking session.
-    Looks up existing Patient by name or creates one.
-    Returns booking_session_id and a welcome message.
-    """
-    data = request.json or {}
-    name = (data.get("name") or "").strip()
-    language = data.get("language", "English")
-    dialect = data.get("dialect", "")
-
-    if not name:
-        return jsonify({"error": "Patient name is required"}), 400
-
-    # Find or create patient
-    patient = Patient.query.filter(Patient.name.ilike(name)).first()
-    if not patient:
-        patient = Patient(
-            name=name,
-            preferred_language=language,
-            dialect=dialect,
-        )
-        db.session.add(patient)
-        db.session.flush()
-
-    bk_session = BookingSession(
-        patient_id=patient.id,
-        language=language,
-        dialect=dialect,
-        state="collecting",
-    )
-    db.session.add(bk_session)
-    db.session.commit()
-
-    welcome = (
-        f"Hello {patient.name}! I'm Aria, your voice booking assistant. "
-        "Which doctor or specialty would you like to book, and when are you available?"
-    )
-    return jsonify({
-        "booking_session_id": bk_session.id,
-        "patient_id": patient.id,
-        "patient_name": patient.name,
-        "welcome_message": welcome,
-    }), 201
-
-
-@app.route("/api/booking/<booking_id>/message", methods=["POST"])
-def booking_message(booking_id):
-    """
-    Process one voice message turn.
-    Runs the full pipeline: normalize → classify → match slots → confirm prompt.
-    The LLM result is NEVER directly applied — only a response is returned.
-    """
-    from voice_agent.agent import process_message
-
-    bk_session = BookingSession.query.get_or_404(booking_id)
-    data = request.json or {}
-    raw_text = (data.get("message") or "").strip()
-
-    if not raw_text:
-        return jsonify({"error": "message cannot be empty"}), 400
-
-    result = process_message(
-        db=db,
-        booking_session_id=booking_id,
-        raw_text=raw_text,
-        language=bk_session.language,
-        dialect=bk_session.dialect,
-    )
-    return jsonify(result)
-
-
-@app.route("/api/booking/<booking_id>/confirm", methods=["POST"])
-def confirm_booking(booking_id):
-    """
-    Explicitly confirm the proposed slot.
-    Only this route (not the LLM) writes the booking to the database.
-    """
-    from voice_agent.action_handler import execute_booking
-    import json as _json
-
-    bk_session = BookingSession.query.get_or_404(booking_id)
-    if bk_session.state != "confirming":
-        return jsonify({"error": f"Session is not in confirming state (current: {bk_session.state})"}), 400
-
-    slots_data = _json.loads(bk_session.extracted_slots or "{}")
-    slot_id = slots_data.get("_matched_slot_id")
-    if not slot_id:
-        return jsonify({"error": "No slot queued for confirmation"}), 400
-
-    try:
-        booking_ref = execute_booking(db, booking_id, slot_id)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 409
-
-    slot = AppointmentSlot.query.get(slot_id)
-    return jsonify({
-        "booking_ref": booking_ref,
-        "doctor_name": slot.doctor_name if slot else "",
-        "specialty": slot.specialty if slot else "",
-        "slot_date": slot.slot_datetime.strftime("%A, %d %B %Y") if slot else "",
-        "slot_time": slot.slot_datetime.strftime("%I:%M %p") if slot else "",
-        "state": "confirmed",
-    })
-
-
-@app.route("/api/booking/<booking_id>/cancel", methods=["POST"])
-def cancel_booking_route(booking_id):
-    """Cancel the current booking session."""
-    from voice_agent.action_handler import cancel_booking
-
-    BookingSession.query.get_or_404(booking_id)
-    cancel_booking(db, booking_id)
-    return jsonify({"state": "cancelled"})
-
-
-@app.route("/api/booking/<booking_id>", methods=["GET"])
-def get_booking_session(booking_id):
-    """Return current state of a booking session."""
-    import json as _json
-
-    bk_session = BookingSession.query.get_or_404(booking_id)
-    patient = Patient.query.get(bk_session.patient_id)
-    slot = AppointmentSlot.query.get(bk_session.appointment_slot_id) if bk_session.appointment_slot_id else None
-
-    return jsonify({
-        "id": bk_session.id,
-        "patient_name": patient.name if patient else "",
-        "state": bk_session.state,
-        "language": bk_session.language,
-        "dialect": bk_session.dialect,
-        "normalized_input": bk_session.normalized_input,
-        "extracted_slots": _json.loads(bk_session.extracted_slots or "{}"),
-        "confirmed_slot": {
-            "doctor_name": slot.doctor_name,
-            "specialty": slot.specialty,
-            "slot_date": slot.slot_datetime.strftime("%A, %d %B %Y"),
-            "slot_time": slot.slot_datetime.strftime("%I:%M %p"),
-        } if slot else None,
-        "created_at": bk_session.created_at.isoformat() if bk_session.created_at else None,
-        "completed_at": bk_session.completed_at.isoformat() if bk_session.completed_at else None,
-    })
 
 
 # ---------------------------------------------------------------------------
@@ -1103,42 +948,7 @@ with app.app_context():
         db.session.commit()
     except Exception:
         db.session.rollback()
-
-    # Seed mock appointment slots (only if table is empty)
-    if AppointmentSlot.query.count() == 0:
-        from datetime import timedelta
-        _base = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        _slots_seed = [
-            # Dr. Tan Wei Ming — General Practice
-            ("Dr. Tan Wei Ming", "General Practice",  3,  9, 0),
-            ("Dr. Tan Wei Ming", "General Practice",  3, 14, 0),
-            ("Dr. Tan Wei Ming", "General Practice",  5, 10, 0),
-            ("Dr. Tan Wei Ming", "General Practice",  7, 11, 0),
-            # Dr. Lee Hui Ling — Cardiology
-            ("Dr. Lee Hui Ling", "Cardiology",        4,  9, 0),
-            ("Dr. Lee Hui Ling", "Cardiology",        4, 15, 0),
-            ("Dr. Lee Hui Ling", "Cardiology",        8, 10, 0),
-            # Dr. Kumar Rajan — Dermatology
-            ("Dr. Kumar Rajan", "Dermatology",        3, 11, 0),
-            ("Dr. Kumar Rajan", "Dermatology",        6, 14, 0),
-            ("Dr. Kumar Rajan", "Dermatology",        9, 16, 0),
-            # Dr. Wong Beng Huat — Orthopaedics
-            ("Dr. Wong Beng Huat", "Orthopaedics",    5,  9, 0),
-            ("Dr. Wong Beng Huat", "Orthopaedics",    5, 14, 0),
-            ("Dr. Wong Beng Huat", "Orthopaedics",   10, 11, 0),
-            ("Dr. Wong Beng Huat", "Orthopaedics",   12, 15, 0),
-            ("Dr. Lee Hui Ling",  "Cardiology",       11, 10, 0),
-        ]
-        for doctor, specialty, day_offset, hour, minute in _slots_seed:
-            slot_dt = (_base + timedelta(days=day_offset)).replace(
-                hour=hour, minute=minute, tzinfo=None
-            )
-            db.session.add(AppointmentSlot(
-                doctor_name=doctor,
-                specialty=specialty,
-                slot_datetime=slot_dt,
-            ))
-        db.session.commit()
+    # Ensure booking tables exist (idempotent via create_all above)
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5001))
