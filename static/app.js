@@ -10,23 +10,19 @@ const API = '';  // Same origin
 // ---------------------------------------------------------------------------
 
 const SPEECH_LANG_MAP = {
-    'en':            'en-SG',
-    'zh':            'zh-CN',
-    'ms':            'ms-MY',
-    'ta':            'ta-SG',
-    'zh-hokkien':    'zh-CN',
-    'zh-teochew':    'zh-CN',
-    'zh-cantonese':  'zh-HK',
-    'zh-hakka':      'zh-CN',
-    'zh-hainanese':  'zh-CN',
-    'hi':            'hi-IN',
-    'tl':            'fil-PH',
-    'vi':            'vi-VN',
-    'th':            'th-TH',
-    'id':            'id-ID',
-    'my':            'my-MM',
-    'bn':            'bn-BD',
-    'km':            'km-KH',
+    'en':           'en-SG',
+    'zh':           'zh-CN',
+    'ms':           'ms-MY',
+    'ta':           'ta-SG',
+    'zh-cantonese': 'zh-HK',
+    'hi':           'hi-IN',
+    'tl':           'fil-PH',
+    'vi':           'vi-VN',
+    'th':           'th-TH',
+    'id':           'id-ID',
+    'my':           'my-MM',
+    'bn':           'bn-BD',
+    'km':           'km-KH',
 };
 
 // ---------------------------------------------------------------------------
@@ -147,17 +143,19 @@ function populateCheckinLanguageDropdown() {
     const sel = document.getElementById('checkin-language');
     if (!sel) return;
     sel.innerHTML = '';
-    const langs = Object.keys(state.languages);
-    const groups = [
-        { label: 'Singapore Official Languages', items: langs.slice(0, 4) },
-        { label: 'Singapore Chinese Dialects',   items: langs.slice(4, 9) },
-        { label: 'Southeast Asian Languages',    items: langs.slice(9) },
-    ];
-    for (const group of groups) {
-        if (!group.items.length) continue;
+
+    // Build optgroups dynamically from the group field returned by the API
+    const grouped = {};
+    const groupOrder = [];
+    for (const [lang, data] of Object.entries(state.languages)) {
+        const g = data.group || 'Other';
+        if (!grouped[g]) { grouped[g] = []; groupOrder.push(g); }
+        grouped[g].push(lang);
+    }
+    for (const groupLabel of groupOrder) {
         const optgroup = document.createElement('optgroup');
-        optgroup.label = group.label;
-        for (const lang of group.items) {
+        optgroup.label = groupLabel;
+        for (const lang of grouped[groupLabel]) {
             const opt = document.createElement('option');
             opt.value = lang;
             opt.textContent = lang;
@@ -355,30 +353,20 @@ function checkinSpeakThenListen(text) {
     utterance.rate = 0.92;
     utterance.pitch = 1;
 
-    // Try to pick a matching voice
-    const voices = speechSynthesis.getVoices();
-    const matched = voices.find(v => v.lang === bcp47) ||
-                    voices.find(v => v.lang.startsWith(bcp47.split('-')[0]));
+    const matched = findVoice(bcp47);
     if (matched) utterance.voice = matched;
 
     checkinUtterance = utterance;
     checkinState.isSpeaking = true;
 
-    utterance.onend = () => {
-        checkinState.isSpeaking = false;
-        checkinUtterance = null;
-        if (checkinState.isAutoMode) {
-            setCheckinVoiceIndicator('idle');
-            setTimeout(() => startCheckinListening(), 400);
-        } else {
-            setCheckinVoiceIndicator('idle');
-        }
-    };
-    utterance.onerror = () => {
+    const onDone = () => {
         checkinState.isSpeaking = false;
         checkinUtterance = null;
         setCheckinVoiceIndicator('idle');
+        if (checkinState.isAutoMode) setTimeout(() => startCheckinListening(), 400);
     };
+    utterance.onend  = onDone;
+    utterance.onerror = onDone;
 
     speechSynthesis.speak(utterance);
 }
@@ -389,10 +377,21 @@ function stopCheckinSpeaking() {
     checkinUtterance = null;
 }
 
-// Preload voices (needed for some browsers)
+// Cache voices — Chrome loads them async, so we store on voiceschanged
+let _cachedVoices = [];
 if ('speechSynthesis' in window) {
-    speechSynthesis.getVoices();
-    speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+    _cachedVoices = speechSynthesis.getVoices();
+    speechSynthesis.onvoiceschanged = () => { _cachedVoices = speechSynthesis.getVoices(); };
+}
+
+function findVoice(bcp47) {
+    const voices = _cachedVoices.length ? _cachedVoices : speechSynthesis.getVoices();
+    const prefix = bcp47.split('-')[0];
+    // Exact match first, then same-language prefix (e.g. zh-TW for zh-CN), then language root
+    return voices.find(v => v.lang === bcp47) ||
+           voices.find(v => v.lang.startsWith(prefix + '-')) ||
+           voices.find(v => v.lang === prefix) ||
+           null;
 }
 
 // ---------------------------------------------------------------------------

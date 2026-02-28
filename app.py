@@ -18,10 +18,6 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from openai import OpenAI, AuthenticationError
-try:
-    import anthropic as _anthropic_sdk
-except ImportError:
-    _anthropic_sdk = None
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -36,49 +32,24 @@ app.json.sort_keys = False   # preserve insertion order for language dropdown
 db = SQLAlchemy(app)
 
 # ---------------------------------------------------------------------------
-# LLM Client — supports Claude (Anthropic), SEA-LION, Groq, OpenAI
-# Priority order: ANTHROPIC_API_KEY > SEALION_API_KEY > GROQ_API_KEY > OPENAI_API_KEY
+# LLM Client — MERaLion only
 # ---------------------------------------------------------------------------
 
-_llm_client = None   # cached OpenAI-compatible client
+_llm_client = None
 LLM_MODEL = os.getenv("LLM_MODEL", "")
 
 
 def _resolve_provider():
-    """Detect which provider to use based on available env vars."""
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
-    sealion_key   = os.getenv("SEALION_API_KEY", "")
-    groq_key      = os.getenv("GROQ_API_KEY", "")
-    openai_key    = os.getenv("OPENAI_API_KEY", "")
-
-    if anthropic_key:
-        return {
-            "type": "anthropic", "name": "Claude",
-            "api_key": anthropic_key,
-            "model": os.getenv("LLM_MODEL", "claude-sonnet-4-5"),
-        }
-    if sealion_key:
-        return {
-            "type": "openai_compat", "name": "SEA-LION",
-            "api_key": sealion_key,
-            "base_url": "https://api.sea-lion.ai/v1",
-            "model": os.getenv("LLM_MODEL", "aisingapore/gemma3-12b-it"),
-        }
-    if groq_key:
-        return {
-            "type": "openai_compat", "name": "Groq",
-            "api_key": groq_key,
-            "base_url": "https://api.groq.com/openai/v1",
-            "model": os.getenv("LLM_MODEL", "llama-3.3-70b-versatile"),
-        }
-    if openai_key:
-        return {
-            "type": "openai_compat", "name": "OpenAI",
-            "api_key": openai_key,
-            "base_url": None,
-            "model": os.getenv("LLM_MODEL", "gpt-4o"),
-        }
-    return None
+    """Use SEA-LION as the sole LLM provider."""
+    key = os.getenv("SEALION_API_KEY", "")
+    if not key:
+        return None
+    return {
+        "type": "openai_compat", "name": "SEA-LION",
+        "api_key": key,
+        "base_url": "https://api.sea-lion.ai/v1",
+        "model": os.getenv("LLM_MODEL", "aisingapore/Qwen-SEA-LION-v4-32B-IT"),
+    }
 
 
 def call_llm(messages, max_tokens=500, temperature=0.7):
@@ -98,40 +69,7 @@ def call_llm(messages, max_tokens=500, temperature=0.7):
 
     LLM_MODEL = provider["model"]
 
-    # ---- Anthropic Claude ----
-    if provider["type"] == "anthropic":
-        if _anthropic_sdk is None:
-            app.logger.error("anthropic package not installed – run: pip install anthropic")
-            return None, False
-
-        system_msg = next((m["content"] for m in messages if m["role"] == "system"), "")
-        chat_msgs  = [m for m in messages if m["role"] != "system"]
-
-        # Anthropic requires at least one user message and must start with user
-        if not chat_msgs:
-            chat_msgs = [{"role": "user", "content": "Begin."}]
-        elif chat_msgs[0]["role"] != "user":
-            chat_msgs.insert(0, {"role": "user", "content": "."})
-
-        kwargs = {
-            "model": provider["model"],
-            "messages": chat_msgs,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-        }
-        if system_msg:
-            kwargs["system"] = system_msg
-
-        try:
-            client = _anthropic_sdk.Anthropic(api_key=provider["api_key"])
-            resp = client.messages.create(**kwargs)
-            return resp.content[0].text, False
-        except _anthropic_sdk.AuthenticationError:
-            return None, True
-        except Exception:
-            raise
-
-    # ---- OpenAI-compatible (SEA-LION / Groq / OpenAI) ----
+    # ---- MERaLion (OpenAI-compatible) ----
     oa_kwargs = {"api_key": provider["api_key"]}
     if provider.get("base_url"):
         oa_kwargs["base_url"] = provider["base_url"]
@@ -214,84 +152,77 @@ SUPPORTED_LANGUAGES = {
     "English": {
         "dialects": ["Standard Singapore English", "Singlish"],
         "code": "en",
+        "group": "Singapore Official Languages",
     },
     "华语 (Mandarin)": {
         "dialects": ["新加坡华语 (Singapore Mandarin)", "标准普通话 (Standard Mandarin)"],
         "code": "zh",
+        "group": "Singapore Official Languages",
     },
     "Malay (Bahasa Melayu)": {
-        "dialects": ["Standard Bahasa Melayu", "Bazaar Malay / Pasar Melayu", "Informal / Colloquial Malay"],
+        "dialects": ["Standard Bahasa Melayu", "Bazaar Melayu / Pasar Melayu", "Informal / Colloquial Malay"],
         "code": "ms",
+        "group": "Singapore Official Languages",
     },
     "Tamil (தமிழ்)": {
         "dialects": ["Singapore Tamil (சிங்கப்பூர் தமிழ்)", "Standard Tamil (நிலைத்தமிழ்)"],
         "code": "ta",
+        "group": "Singapore Official Languages",
     },
     # --- Singapore Chinese Dialects ---
-    "福建话 (Hokkien)": {
-        "dialects": ["新加坡福建话 (Singapore Hokkien)", "槟城福建话 (Penang Hokkien)"],
-        "code": "zh-hokkien",
-    },
-    "潮州话 (Teochew)": {
-        "dialects": ["新加坡潮州话 (Singapore Teochew)"],
-        "code": "zh-teochew",
-    },
+    # Only Cantonese is included: it has a standard written form that SEA-LION handles well.
+    # Hokkien, Teochew, Hakka, and Hainanese have no standard written form — LLMs hallucinate.
     "广东话 (Cantonese)": {
         "dialects": ["新加坡广东话 (Singapore Cantonese)", "香港广东话 (Hong Kong Cantonese)"],
         "code": "zh-cantonese",
-    },
-    "客家话 (Hakka)": {
-        "dialects": ["新加坡客家话 (Singapore Hakka)"],
-        "code": "zh-hakka",
-    },
-    "海南话 (Hainanese)": {
-        "dialects": ["新加坡海南话 (Singapore Hainanese)"],
-        "code": "zh-hainanese",
+        "group": "Singapore Chinese Dialects",
     },
     # --- Southeast Asian Languages ---
     "Hindi (हिन्दी)": {
         "dialects": ["Standard Hindi", "Colloquial Hindi"],
         "code": "hi",
+        "group": "Southeast Asian Languages",
     },
     "Tagalog (Filipino)": {
         "dialects": ["Standard Filipino", "Taglish"],
         "code": "tl",
+        "group": "Southeast Asian Languages",
     },
     "Vietnamese (Tiếng Việt)": {
         "dialects": ["Northern Vietnamese", "Southern Vietnamese"],
         "code": "vi",
+        "group": "Southeast Asian Languages",
     },
     "Thai (ภาษาไทย)": {
         "dialects": ["Central Thai", "Informal Thai"],
         "code": "th",
+        "group": "Southeast Asian Languages",
     },
     "Bahasa Indonesia": {
         "dialects": ["Formal Indonesian", "Informal / Colloquial"],
         "code": "id",
+        "group": "Southeast Asian Languages",
     },
     "Burmese (မြန်မာဘာသာ)": {
         "dialects": ["Standard Burmese", "Colloquial Burmese"],
         "code": "my",
+        "group": "Southeast Asian Languages",
     },
     "Bengali (বাংলা)": {
         "dialects": ["Standard Bengali", "Bangladeshi Bengali"],
         "code": "bn",
+        "group": "Southeast Asian Languages",
     },
     "Khmer (ភាសាខ្មែរ)": {
         "dialects": ["Standard Khmer", "Colloquial Khmer"],
         "code": "km",
+        "group": "Southeast Asian Languages",
     },
 }
 
-# Languages/dialects that typical LLMs do not support well for translation.
-# For these we do not generate an English translation (doctor sees original only).
-LANGUAGES_SKIP_ENGLISH_TRANSLATION = frozenset({
-    "福建话 (Hokkien)",
-    "潮州话 (Teochew)",
-    "广东话 (Cantonese)",
-    "客家话 (Hakka)",
-    "海南话 (Hainanese)",
-})
+# All remaining languages (including Cantonese) are supported well enough by
+# SEA-LION for English translation. Keep this frozenset as a safety valve.
+LANGUAGES_SKIP_ENGLISH_TRANSLATION = frozenset()
 
 
 # ---------------------------------------------------------------------------
@@ -909,11 +840,7 @@ def _fallback_greeting(language, name, session_type):
         "华语 (Mandarin)": f"你好 {name}！欢迎。我在这里帮助您进行{'问诊前登记' if pre else '就诊后随访'}。您今天感觉怎么样？",
         "Malay (Bahasa Melayu)": f"Selamat datang {name}! Saya di sini untuk membantu anda dengan {'pendaftaran pra-konsultasi' if pre else 'tindakan susulan'}. Bagaimana perasaan anda hari ini?",
         "Tamil (தமிழ்)": f"வணக்கம் {name}! வரவேற்கிறோம். உங்கள் {'முன்-ஆலோசனை பதிவு' if pre else 'பின்-ஆலோசனை தொடர்'}க்கு நான் உதவ இருக்கிறேன். இன்று எப்படி உணர்கிறீர்கள்?",
-        "福建话 (Hokkien)": f"你好 {name}！歡迎。我在這裡幫助你{'看醫生之前登記' if pre else '看完醫生後跟進'}。你今天感覺怎樣？",
-        "潮州话 (Teochew)": f"你好 {name}！歡迎。我在這裡幫助你{'看醫生之前登記' if pre else '看完醫生後跟進'}。你今日感覺怎樣？",
         "广东话 (Cantonese)": f"你好 {name}！歡迎。我喺度幫你{'睇醫生之前登記' if pre else '睇完醫生之後跟進'}。你今日覺得點樣？",
-        "客家话 (Hakka)": f"你好 {name}！歡迎。我在這裡幫你{'看醫生之前登記' if pre else '看完醫生後跟進'}。你今日感覺怎樣？",
-        "海南话 (Hainanese)": f"你好 {name}！歡迎。我在這裡幫你{'看醫生之前登記' if pre else '看完醫生後跟進'}。你今日身體怎樣？",
         "Hindi (हिन्दी)": f"नमस्ते {name}! स्वागत है। मैं आपकी {'जाँच-पूर्व पंजीकरण' if pre else 'परामर्श के बाद अनुवर्ती'} में मदद के लिए यहाँ हूँ। आज आप कैसा महसूस कर रहे हैं?",
         "Vietnamese (Tiếng Việt)": f"Xin chào {name}! Chào mừng bạn. Tôi ở đây để giúp bạn với {'đăng ký trước khám' if pre else 'theo dõi sau khám'}. Hôm nay bạn cảm thấy thế nào?",
         "Thai (ภาษาไทย)": f"สวัสดีค่ะ/ครับ {name}! ยินดีต้อนรับ ฉันอยู่ที่นี่เพื่อช่วยคุณ{'ลงทะเบียนก่อนพบแพทย์' if pre else 'ติดตามผลหลังพบแพทย์'} วันนี้คุณรู้สึกอย่างไรบ้าง?",
