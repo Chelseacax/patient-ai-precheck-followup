@@ -46,6 +46,8 @@ SECRET_KEY=any-random-string-here
 
 ```bash
 python3 app.py
+#or
+#python app.py
 ```
 
 ### 4. Open in browser
