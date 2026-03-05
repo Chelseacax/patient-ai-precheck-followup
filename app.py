@@ -143,6 +143,68 @@ class Message(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class FamilyMember(db.Model):
+    __tablename__ = "family_member"
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    patient_id = db.Column(db.String(36), db.ForeignKey("patient.id"), nullable=False)
+    name = db.Column(db.String(120), nullable=False)
+    relationship = db.Column(db.String(50), nullable=False)
+    date_of_birth = db.Column(db.String(10))
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class Appointment(db.Model):
+    __tablename__ = "appointment"
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    patient_id = db.Column(db.String(36), db.ForeignKey("patient.id"), nullable=False)
+    family_member_id = db.Column(db.String(36), db.ForeignKey("family_member.id"), nullable=True)
+    doctor_id = db.Column(db.String(50), nullable=False)
+    doctor_name = db.Column(db.String(120), nullable=False)
+    specialty = db.Column(db.String(80), nullable=False)
+    slot_datetime = db.Column(db.String(20), nullable=False)   # "YYYY-MM-DD HH:MM"
+    reason = db.Column(db.Text)
+    status = db.Column(db.String(20), default="scheduled")     # scheduled | cancelled
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class Medication(db.Model):
+    __tablename__ = "medication"
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    patient_id = db.Column(db.String(36), db.ForeignKey("patient.id"), nullable=False)
+    family_member_id = db.Column(db.String(36), db.ForeignKey("family_member.id"), nullable=True)
+    name = db.Column(db.String(120), nullable=False)
+    dosage = db.Column(db.String(80))
+    frequency = db.Column(db.String(80))
+    reminder_times = db.Column(db.Text)   # JSON array e.g. '["08:00","20:00"]'
+    start_date = db.Column(db.String(10))
+    end_date = db.Column(db.String(10))
+    notes = db.Column(db.Text)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class AgentSession(db.Model):
+    __tablename__ = "agent_session"
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    patient_id = db.Column(db.String(36), db.ForeignKey("patient.id"), nullable=False)
+    language_used = db.Column(db.String(50))
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    messages = db.relationship("AgentMessage", backref="agent_session", lazy=True, order_by="AgentMessage.created_at")
+
+
+class AgentMessage(db.Model):
+    __tablename__ = "agent_message"
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = db.Column(db.String(36), db.ForeignKey("agent_session.id"), nullable=False)
+    role = db.Column(db.String(20), nullable=False)   # user | assistant | tool
+    content = db.Column(db.Text)
+    tool_name = db.Column(db.String(80))
+    tool_result_json = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 # ---------------------------------------------------------------------------
 # Language & Cultural Configuration — Singapore / Southeast Asia
 # ---------------------------------------------------------------------------
@@ -223,6 +285,99 @@ SUPPORTED_LANGUAGES = {
 # All remaining languages (including Cantonese) are supported well enough by
 # SEA-LION for English translation. Keep this frozenset as a safety valve.
 LANGUAGES_SKIP_ENGLISH_TRANSLATION = frozenset()
+
+
+# ---------------------------------------------------------------------------
+# Mock Doctor Data
+# ---------------------------------------------------------------------------
+
+MOCK_DOCTORS = [
+    {
+        "id": "dr_lim",
+        "name": "Dr. Lim Wei Jie",
+        "specialty": "General Practice",
+        "slots": [
+            {"slot_id": "dr_lim_01", "datetime": "2026-03-05 09:00"},
+            {"slot_id": "dr_lim_02", "datetime": "2026-03-05 10:00"},
+            {"slot_id": "dr_lim_03", "datetime": "2026-03-05 11:00"},
+            {"slot_id": "dr_lim_04", "datetime": "2026-03-05 14:00"},
+            {"slot_id": "dr_lim_05", "datetime": "2026-03-06 09:00"},
+            {"slot_id": "dr_lim_06", "datetime": "2026-03-06 10:00"},
+            {"slot_id": "dr_lim_07", "datetime": "2026-03-06 14:00"},
+            {"slot_id": "dr_lim_08", "datetime": "2026-03-07 09:00"},
+            {"slot_id": "dr_lim_09", "datetime": "2026-03-07 15:00"},
+            {"slot_id": "dr_lim_10", "datetime": "2026-03-10 10:00"},
+        ],
+    },
+    {
+        "id": "dr_siti",
+        "name": "Dr. Siti Rahimah",
+        "specialty": "Cardiology",
+        "slots": [
+            {"slot_id": "dr_siti_01", "datetime": "2026-03-05 10:00"},
+            {"slot_id": "dr_siti_02", "datetime": "2026-03-05 14:00"},
+            {"slot_id": "dr_siti_03", "datetime": "2026-03-06 10:00"},
+            {"slot_id": "dr_siti_04", "datetime": "2026-03-06 14:00"},
+            {"slot_id": "dr_siti_05", "datetime": "2026-03-07 10:00"},
+            {"slot_id": "dr_siti_06", "datetime": "2026-03-09 10:00"},
+            {"slot_id": "dr_siti_07", "datetime": "2026-03-10 10:00"},
+            {"slot_id": "dr_siti_08", "datetime": "2026-03-10 14:00"},
+            {"slot_id": "dr_siti_09", "datetime": "2026-03-11 10:00"},
+            {"slot_id": "dr_siti_10", "datetime": "2026-03-11 14:00"},
+        ],
+    },
+    {
+        "id": "dr_rajan",
+        "name": "Dr. Rajan Pillai",
+        "specialty": "Dermatology",
+        "slots": [
+            {"slot_id": "dr_rajan_01", "datetime": "2026-03-05 09:00"},
+            {"slot_id": "dr_rajan_02", "datetime": "2026-03-05 11:00"},
+            {"slot_id": "dr_rajan_03", "datetime": "2026-03-05 15:00"},
+            {"slot_id": "dr_rajan_04", "datetime": "2026-03-06 09:00"},
+            {"slot_id": "dr_rajan_05", "datetime": "2026-03-06 11:00"},
+            {"slot_id": "dr_rajan_06", "datetime": "2026-03-08 10:00"},
+            {"slot_id": "dr_rajan_07", "datetime": "2026-03-08 14:00"},
+            {"slot_id": "dr_rajan_08", "datetime": "2026-03-10 09:00"},
+            {"slot_id": "dr_rajan_09", "datetime": "2026-03-10 11:00"},
+            {"slot_id": "dr_rajan_10", "datetime": "2026-03-10 15:00"},
+        ],
+    },
+    {
+        "id": "dr_chen",
+        "name": "Dr. Chen Xiu Ying",
+        "specialty": "Paediatrics",
+        "slots": [
+            {"slot_id": "dr_chen_01", "datetime": "2026-03-05 09:00"},
+            {"slot_id": "dr_chen_02", "datetime": "2026-03-05 10:00"},
+            {"slot_id": "dr_chen_03", "datetime": "2026-03-05 14:00"},
+            {"slot_id": "dr_chen_04", "datetime": "2026-03-05 15:00"},
+            {"slot_id": "dr_chen_05", "datetime": "2026-03-06 09:00"},
+            {"slot_id": "dr_chen_06", "datetime": "2026-03-06 14:00"},
+            {"slot_id": "dr_chen_07", "datetime": "2026-03-09 09:00"},
+            {"slot_id": "dr_chen_08", "datetime": "2026-03-09 10:00"},
+            {"slot_id": "dr_chen_09", "datetime": "2026-03-09 14:00"},
+            {"slot_id": "dr_chen_10", "datetime": "2026-03-09 15:00"},
+        ],
+    },
+    {
+        "id": "dr_farhan",
+        "name": "Dr. Muhammad Farhan",
+        "specialty": "Orthopaedics",
+        "slots": [
+            {"slot_id": "dr_farhan_01", "datetime": "2026-03-06 14:00"},
+            {"slot_id": "dr_farhan_02", "datetime": "2026-03-06 15:00"},
+            {"slot_id": "dr_farhan_03", "datetime": "2026-03-07 09:00"},
+            {"slot_id": "dr_farhan_04", "datetime": "2026-03-07 10:00"},
+            {"slot_id": "dr_farhan_05", "datetime": "2026-03-07 15:00"},
+            {"slot_id": "dr_farhan_06", "datetime": "2026-03-09 14:00"},
+            {"slot_id": "dr_farhan_07", "datetime": "2026-03-09 15:00"},
+            {"slot_id": "dr_farhan_08", "datetime": "2026-03-10 09:00"},
+            {"slot_id": "dr_farhan_09", "datetime": "2026-03-10 10:00"},
+            {"slot_id": "dr_farhan_10", "datetime": "2026-03-10 14:00"},
+        ],
+    },
+]
 
 
 # ---------------------------------------------------------------------------
@@ -355,6 +510,501 @@ Write a simple, friendly summary for the patient in {language} that:
 - Includes encouragement
 
 Return as JSON: {{"clinician_summary": "...", "patient_summary": "..."}}"""
+
+
+# ---------------------------------------------------------------------------
+# Agent Tool Functions
+# ---------------------------------------------------------------------------
+
+def tool_get_family_members(patient_id):
+    members = FamilyMember.query.filter_by(patient_id=patient_id).all()
+    return [{"id": m.id, "name": m.name, "relationship": m.relationship,
+             "date_of_birth": m.date_of_birth or "", "notes": m.notes or ""} for m in members]
+
+
+def tool_add_family_member(patient_id, name, relationship, dob="", notes=""):
+    member = FamilyMember(patient_id=patient_id, name=name, relationship=relationship,
+                          date_of_birth=dob or None, notes=notes or None)
+    db.session.add(member)
+    db.session.commit()
+    return {"id": member.id, "name": member.name, "relationship": member.relationship}
+
+
+def tool_get_doctors(specialty=None):
+    if specialty:
+        spec_lower = specialty.lower()
+        doctors = [d for d in MOCK_DOCTORS if spec_lower in d["specialty"].lower()]
+    else:
+        doctors = MOCK_DOCTORS
+    return [{"id": d["id"], "name": d["name"], "specialty": d["specialty"]} for d in doctors]
+
+
+def tool_get_doctor_slots(doctor_id, date=None):
+    doctor = next((d for d in MOCK_DOCTORS if d["id"] == doctor_id), None)
+    if not doctor:
+        return {"error": f"Doctor '{doctor_id}' not found"}
+    booked = {a.slot_datetime for a in Appointment.query.filter_by(
+        doctor_id=doctor_id, status="scheduled").all()}
+    slots = doctor["slots"]
+    if date:
+        slots = [s for s in slots if s["datetime"].startswith(date)]
+    available = [s for s in slots if s["datetime"] not in booked]
+    return {"doctor_name": doctor["name"], "specialty": doctor["specialty"], "available_slots": available}
+
+
+def tool_book_appointment(patient_id, doctor_id, slot_datetime, reason, family_member_id=None):
+    doctor = next((d for d in MOCK_DOCTORS if d["id"] == doctor_id), None)
+    if not doctor:
+        return {"error": f"Doctor '{doctor_id}' not found"}
+    # Check not already booked
+    existing = Appointment.query.filter_by(doctor_id=doctor_id, slot_datetime=slot_datetime,
+                                           status="scheduled").first()
+    if existing:
+        return {"error": f"Slot {slot_datetime} is already booked"}
+    appt = Appointment(
+        patient_id=patient_id,
+        family_member_id=family_member_id or None,
+        doctor_id=doctor_id,
+        doctor_name=doctor["name"],
+        specialty=doctor["specialty"],
+        slot_datetime=slot_datetime,
+        reason=reason,
+        status="scheduled",
+    )
+    db.session.add(appt)
+    db.session.commit()
+    for_whom = ""
+    if family_member_id:
+        fm = FamilyMember.query.get(family_member_id)
+        if fm:
+            for_whom = f" for {fm.name}"
+    return {"appointment_id": appt.id, "doctor": doctor["name"], "specialty": doctor["specialty"],
+            "datetime": slot_datetime, "reason": reason, "for": for_whom.strip()}
+
+
+def tool_get_appointments(patient_id, family_member_id=None):
+    query = Appointment.query.filter_by(patient_id=patient_id, status="scheduled")
+    if family_member_id:
+        query = query.filter_by(family_member_id=family_member_id)
+    appts = query.order_by(Appointment.slot_datetime).all()
+    result = []
+    for a in appts:
+        fm_name = ""
+        if a.family_member_id:
+            fm = FamilyMember.query.get(a.family_member_id)
+            if fm:
+                fm_name = fm.name
+        result.append({"id": a.id, "doctor": a.doctor_name, "specialty": a.specialty,
+                        "datetime": a.slot_datetime, "reason": a.reason or "",
+                        "for": fm_name or "self"})
+    return result
+
+
+def tool_cancel_appointment(appointment_id, patient_id):
+    appt = Appointment.query.filter_by(id=appointment_id, patient_id=patient_id).first()
+    if not appt:
+        return {"error": "Appointment not found or not authorized"}
+    appt.status = "cancelled"
+    db.session.commit()
+    return {"cancelled": True, "appointment_id": appointment_id, "doctor": appt.doctor_name,
+            "datetime": appt.slot_datetime}
+
+
+def tool_add_medication(patient_id, name, dosage, frequency, reminder_times,
+                        start_date="", end_date="", notes="", family_member_id=None):
+    if isinstance(reminder_times, list):
+        reminder_json = json.dumps(reminder_times)
+    else:
+        reminder_json = reminder_times if reminder_times else "[]"
+    med = Medication(
+        patient_id=patient_id,
+        family_member_id=family_member_id or None,
+        name=name,
+        dosage=dosage,
+        frequency=frequency,
+        reminder_times=reminder_json,
+        start_date=start_date or None,
+        end_date=end_date or None,
+        notes=notes or None,
+        is_active=True,
+    )
+    db.session.add(med)
+    db.session.commit()
+    return {"medication_id": med.id, "name": name, "dosage": dosage, "frequency": frequency,
+            "reminder_times": json.loads(reminder_json)}
+
+
+def tool_get_medications(patient_id, family_member_id=None, active_only=True):
+    query = Medication.query.filter_by(patient_id=patient_id)
+    if active_only:
+        query = query.filter_by(is_active=True)
+    if family_member_id:
+        query = query.filter_by(family_member_id=family_member_id)
+    meds = query.all()
+    result = []
+    for m in meds:
+        fm_name = ""
+        if m.family_member_id:
+            fm = FamilyMember.query.get(m.family_member_id)
+            if fm:
+                fm_name = fm.name
+        try:
+            reminders = json.loads(m.reminder_times or "[]")
+        except Exception:
+            reminders = []
+        result.append({"id": m.id, "name": m.name, "dosage": m.dosage or "",
+                        "frequency": m.frequency or "", "reminder_times": reminders,
+                        "start_date": m.start_date or "", "end_date": m.end_date or "",
+                        "notes": m.notes or "", "for": fm_name or "self"})
+    return result
+
+
+def tool_remove_medication(medication_id, patient_id):
+    med = Medication.query.filter_by(id=medication_id, patient_id=patient_id).first()
+    if not med:
+        return {"error": "Medication not found or not authorized"}
+    med.is_active = False
+    db.session.commit()
+    return {"removed": True, "medication_id": medication_id, "name": med.name}
+
+
+def tool_get_health_summary(patient_id, family_member_id=None):
+    appts = tool_get_appointments(patient_id, family_member_id)
+    meds = tool_get_medications(patient_id, family_member_id, active_only=True)
+    family = tool_get_family_members(patient_id)
+    # Past consultations (pre-consultation sessions)
+    past_sessions = Session.query.filter_by(patient_id=patient_id, session_type="pre",
+                                             status="completed").order_by(Session.created_at.desc()).limit(5).all()
+    consultations = [{"date": s.created_at.strftime("%Y-%m-%d") if s.created_at else "",
+                      "language": s.language_used or ""} for s in past_sessions]
+    return {"upcoming_appointments": appts, "active_medications": meds,
+            "family_members": family, "past_consultations": consultations}
+
+
+# ---------------------------------------------------------------------------
+# Agent Tool Definitions (OpenAI function-calling format)
+# ---------------------------------------------------------------------------
+
+AGENT_TOOLS = [
+    {"type": "function", "function": {
+        "name": "get_family_members",
+        "description": "List the patient's registered family members or dependants",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    }},
+    {"type": "function", "function": {
+        "name": "add_family_member",
+        "description": "Add a new family member or dependant to the patient's account",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Full name of the family member"},
+                "relationship": {"type": "string", "description": "e.g. son, daughter, mother, father, spouse"},
+                "dob": {"type": "string", "description": "Date of birth YYYY-MM-DD (optional)"},
+                "notes": {"type": "string", "description": "Any additional notes (optional)"},
+            },
+            "required": ["name", "relationship"],
+        },
+    }},
+    {"type": "function", "function": {
+        "name": "get_doctors",
+        "description": "List available doctors, optionally filtered by specialty",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "specialty": {"type": "string", "description": "Filter by specialty (optional), e.g. Cardiology, General Practice"},
+            },
+            "required": [],
+        },
+    }},
+    {"type": "function", "function": {
+        "name": "get_doctor_slots",
+        "description": "Get available appointment slots for a specific doctor",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "doctor_id": {"type": "string", "description": "Doctor ID from get_doctors"},
+                "date": {"type": "string", "description": "Filter by date YYYY-MM-DD (optional)"},
+            },
+            "required": ["doctor_id"],
+        },
+    }},
+    {"type": "function", "function": {
+        "name": "book_appointment",
+        "description": "Book a doctor appointment for the patient or a family member",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "doctor_id": {"type": "string", "description": "Doctor ID from get_doctors"},
+                "slot_datetime": {"type": "string", "description": "Exact datetime string YYYY-MM-DD HH:MM from get_doctor_slots"},
+                "reason": {"type": "string", "description": "Reason for appointment"},
+                "family_member_id": {"type": "string", "description": "Family member ID if booking for a dependant (omit if booking for self)"},
+            },
+            "required": ["doctor_id", "slot_datetime", "reason"],
+        },
+    }},
+    {"type": "function", "function": {
+        "name": "get_appointments",
+        "description": "List the patient's upcoming scheduled appointments",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "family_member_id": {"type": "string", "description": "Filter by family member (optional)"},
+            },
+            "required": [],
+        },
+    }},
+    {"type": "function", "function": {
+        "name": "cancel_appointment",
+        "description": "Cancel a scheduled appointment",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "appointment_id": {"type": "string", "description": "Appointment ID to cancel"},
+            },
+            "required": ["appointment_id"],
+        },
+    }},
+    {"type": "function", "function": {
+        "name": "add_medication",
+        "description": "Add a medication with dosage, frequency and reminder times",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Medication name"},
+                "dosage": {"type": "string", "description": "e.g. 500mg"},
+                "frequency": {"type": "string", "description": "e.g. twice daily, once at night"},
+                "reminder_times": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of reminder times in HH:MM format, e.g. [\"08:00\", \"20:00\"]",
+                },
+                "start_date": {"type": "string", "description": "Start date YYYY-MM-DD (optional)"},
+                "end_date": {"type": "string", "description": "End date YYYY-MM-DD (optional)"},
+                "notes": {"type": "string", "description": "Additional notes (optional)"},
+                "family_member_id": {"type": "string", "description": "Family member ID if for a dependant (optional)"},
+            },
+            "required": ["name", "dosage", "frequency", "reminder_times"],
+        },
+    }},
+    {"type": "function", "function": {
+        "name": "get_medications",
+        "description": "List the patient's active medications",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "family_member_id": {"type": "string", "description": "Filter by family member (optional)"},
+                "active_only": {"type": "boolean", "description": "Return only active medications (default true)"},
+            },
+            "required": [],
+        },
+    }},
+    {"type": "function", "function": {
+        "name": "remove_medication",
+        "description": "Remove (deactivate) a medication from the patient's list",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "medication_id": {"type": "string", "description": "Medication ID to remove"},
+            },
+            "required": ["medication_id"],
+        },
+    }},
+    {"type": "function", "function": {
+        "name": "get_health_summary",
+        "description": "Get a full health overview: upcoming appointments, active medications, family members, past consultations",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "family_member_id": {"type": "string", "description": "Filter by family member (optional)"},
+            },
+            "required": [],
+        },
+    }},
+]
+
+# Tool names list for fallback prompt injection
+_TOOL_NAMES_DESC = "\n".join(
+    f"- {t['function']['name']}: {t['function']['description']}" for t in AGENT_TOOLS
+)
+
+
+# ---------------------------------------------------------------------------
+# Agentic Loop
+# ---------------------------------------------------------------------------
+
+def call_llm_with_tools(messages, tools=None, max_tokens=500, temperature=0.7):
+    """Call LLM with optional tool definitions. Returns full response object."""
+    global LLM_MODEL, _llm_client
+    provider = _resolve_provider()
+    if not provider:
+        return None
+
+    LLM_MODEL = provider["model"]
+    oa_kwargs = {"api_key": provider["api_key"]}
+    if provider.get("base_url"):
+        oa_kwargs["base_url"] = provider["base_url"]
+    if _llm_client is None or _llm_client.api_key != provider["api_key"]:
+        _llm_client = OpenAI(**oa_kwargs)
+
+    kwargs = dict(model=provider["model"], messages=messages,
+                  max_tokens=max_tokens, temperature=temperature)
+    if tools:
+        kwargs["tools"] = tools
+        kwargs["tool_choice"] = "auto"
+
+    try:
+        return _llm_client.chat.completions.create(**kwargs)
+    except Exception as e:
+        app.logger.warning("call_llm_with_tools error: %s", e)
+        return None
+
+
+def _extract_json_tool_call(text):
+    """Extract tool call JSON from <tool_call>{...}</tool_call> in model output."""
+    import re
+    match = re.search(r"<tool_call>(.*?)</tool_call>", text, re.DOTALL)
+    if not match:
+        return None
+    try:
+        return json.loads(match.group(1).strip())
+    except Exception:
+        return None
+
+
+def dispatch_tool(name, args, patient_id):
+    """Route tool name to its implementation, injecting patient_id for auth."""
+    if isinstance(args, str):
+        try:
+            args = json.loads(args)
+        except Exception:
+            args = {}
+
+    dispatch_map = {
+        "get_family_members": lambda: tool_get_family_members(patient_id),
+        "add_family_member": lambda: tool_add_family_member(
+            patient_id, args.get("name", ""), args.get("relationship", ""),
+            args.get("dob", ""), args.get("notes", "")),
+        "get_doctors": lambda: tool_get_doctors(args.get("specialty")),
+        "get_doctor_slots": lambda: tool_get_doctor_slots(
+            args.get("doctor_id", ""), args.get("date")),
+        "book_appointment": lambda: tool_book_appointment(
+            patient_id, args.get("doctor_id", ""), args.get("slot_datetime", ""),
+            args.get("reason", ""), args.get("family_member_id")),
+        "get_appointments": lambda: tool_get_appointments(
+            patient_id, args.get("family_member_id")),
+        "cancel_appointment": lambda: tool_cancel_appointment(
+            args.get("appointment_id", ""), patient_id),
+        "add_medication": lambda: tool_add_medication(
+            patient_id, args.get("name", ""), args.get("dosage", ""),
+            args.get("frequency", ""), args.get("reminder_times", []),
+            args.get("start_date", ""), args.get("end_date", ""),
+            args.get("notes", ""), args.get("family_member_id")),
+        "get_medications": lambda: tool_get_medications(
+            patient_id, args.get("family_member_id"), args.get("active_only", True)),
+        "remove_medication": lambda: tool_remove_medication(
+            args.get("medication_id", ""), patient_id),
+        "get_health_summary": lambda: tool_get_health_summary(
+            patient_id, args.get("family_member_id")),
+    }
+    fn = dispatch_map.get(name)
+    if fn is None:
+        return {"error": f"Unknown tool: {name}"}
+    try:
+        return fn()
+    except Exception as e:
+        app.logger.error("Tool %s error: %s", name, e)
+        return {"error": str(e)}
+
+
+def run_agent(messages, patient_id, max_iter=5):
+    """
+    Agentic loop: LLM → tool_calls → execute → results → LLM (repeat).
+    Returns final text response.
+    """
+    msgs = list(messages)
+    last_text = ""
+
+    for _ in range(max_iter):
+        resp = call_llm_with_tools(msgs, AGENT_TOOLS, max_tokens=600)
+        if resp is None:
+            return last_text or "[AI service unavailable. Please check your API key.]"
+
+        choice = resp.choices[0]
+        msg = choice.message
+
+        # Primary path: native tool_calls
+        if msg.tool_calls:
+            msgs.append({"role": "assistant", "content": msg.content or "",
+                         "tool_calls": [tc.model_dump() for tc in msg.tool_calls]})
+            for tc in msg.tool_calls:
+                result = dispatch_tool(tc.function.name, tc.function.arguments, patient_id)
+                result_str = json.dumps(result, ensure_ascii=False)
+                msgs.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": result_str,
+                })
+            continue
+
+        text = msg.content or ""
+        last_text = text
+
+        # Fallback path: parse <tool_call> from content
+        parsed = _extract_json_tool_call(text)
+        if parsed:
+            tool_name = parsed.get("tool") or parsed.get("name") or parsed.get("function", "")
+            tool_args = parsed.get("params") or parsed.get("arguments") or parsed.get("args") or {}
+            result = dispatch_tool(tool_name, tool_args, patient_id)
+            result_str = json.dumps(result, ensure_ascii=False)
+            # Strip the tool_call block from visible text
+            import re
+            clean_text = re.sub(r"<tool_call>.*?</tool_call>", "", text, flags=re.DOTALL).strip()
+            if clean_text:
+                msgs.append({"role": "assistant", "content": clean_text})
+            msgs.append({"role": "user", "content": f"Tool result for {tool_name}: {result_str}"})
+            continue
+
+        # No tool calls — return final response
+        return text
+
+    return last_text
+
+
+# ---------------------------------------------------------------------------
+# Agent System Prompt
+# ---------------------------------------------------------------------------
+
+AGENT_SYSTEM_PROMPT_TEMPLATE = """You are Aria, a warm and caring AI health assistant at MedBridge Clinic, Singapore.
+You help patients manage their appointments, medications, and health records via voice conversation.
+
+You have access to tools that you can call to help the patient. Use them whenever needed.
+After calling a tool, speak only the result to the patient — never expose raw JSON or technical details.
+
+Voice conversation rules:
+- Keep every response to 1-2 short sentences. This is a voice conversation.
+- Never use markdown, bullet points, or numbered lists.
+- Ask only one question per turn.
+- Be warm, natural, and conversational.
+
+Your capabilities:
+- Book appointments with doctors for the patient or their family members
+- View, manage and cancel existing appointments
+- Add medications with dosage, frequency, and reminder times
+- View active medications
+- Add family members (dependants) to the account
+- Show a health summary with appointments, medications, and past consultations
+
+Booking flow: first call get_doctors (optionally filtered by specialty), then get_doctor_slots for the chosen doctor, then confirm the slot with the patient before calling book_appointment.
+Medication flow: confirm name, dosage, frequency, and reminder times before calling add_medication.
+Family booking: ask who it is for, add them with add_family_member if not yet registered, then book.
+
+Language: respond entirely in {language}. Today's date is {today}."""
+
+
+def _build_agent_system_prompt(language, patient_name):
+    today = datetime.now().strftime("%Y-%m-%d")
+    base = AGENT_SYSTEM_PROMPT_TEMPLATE.format(language=language, today=today)
+    return f"Patient name: {patient_name}.\n\n{base}"
 
 
 # ---------------------------------------------------------------------------
@@ -850,6 +1500,172 @@ def _fallback_greeting(language, name, session_type):
 
 
 # ---------------------------------------------------------------------------
+# API Routes — Agent
+# ---------------------------------------------------------------------------
+
+@app.route("/api/agent/start", methods=["POST"])
+def agent_start():
+    data = request.json or {}
+    patient_id = data.get("patient_id")
+    language = data.get("language", "English")
+    patient_name = data.get("patient_name", "")
+
+    if not patient_id:
+        return jsonify({"error": "patient_id required"}), 400
+
+    patient = Patient.query.get(patient_id)
+    if not patient:
+        return jsonify({"error": "Patient not found"}), 404
+
+    agent_session = AgentSession(patient_id=patient_id, language_used=language)
+    db.session.add(agent_session)
+    db.session.flush()
+
+    system_prompt = _build_agent_system_prompt(language, patient.name)
+    messages = [{"role": "system", "content": system_prompt}]
+
+    # Generate greeting
+    try:
+        resp = call_llm_with_tools(messages, max_tokens=150, temperature=0.8)
+        if resp:
+            greeting = resp.choices[0].message.content or ""
+        else:
+            greeting = f"Hello {patient.name}! I'm Aria, your health assistant. How can I help you today?"
+    except Exception:
+        greeting = f"Hello {patient.name}! I'm Aria, your health assistant. How can I help you today?"
+
+    # Save greeting message
+    greeting_msg = AgentMessage(session_id=agent_session.id, role="assistant", content=greeting)
+    db.session.add(greeting_msg)
+    db.session.commit()
+
+    return jsonify({"session_id": agent_session.id, "greeting": greeting}), 201
+
+
+@app.route("/api/agent/sessions/<session_id>/message", methods=["POST"])
+def agent_message(session_id):
+    agent_session = AgentSession.query.get_or_404(session_id)
+    data = request.json or {}
+    user_text = data.get("message", "").strip()
+    if not user_text:
+        return jsonify({"error": "message required"}), 400
+
+    patient = Patient.query.get(agent_session.patient_id)
+    patient_name = patient.name if patient else ""
+
+    # Save user message
+    user_msg = AgentMessage(session_id=session_id, role="user", content=user_text)
+    db.session.add(user_msg)
+
+    # Rebuild conversation for agent
+    system_prompt = _build_agent_system_prompt(
+        agent_session.language_used or "English", patient_name)
+    messages = [{"role": "system", "content": system_prompt}]
+
+    history = AgentMessage.query.filter_by(session_id=session_id).order_by(
+        AgentMessage.created_at).all()
+    for m in history:
+        if m.role in ("user", "assistant"):
+            messages.append({"role": m.role, "content": m.content or ""})
+
+    messages.append({"role": "user", "content": user_text})
+
+    # Run agentic loop
+    try:
+        reply = run_agent(messages, agent_session.patient_id)
+    except Exception as e:
+        app.logger.error("Agent error: %s", e)
+        reply = "[Service temporarily unavailable. Please try again.]"
+
+    # Save assistant reply
+    asst_msg = AgentMessage(session_id=session_id, role="assistant", content=reply)
+    db.session.add(asst_msg)
+    db.session.commit()
+
+    return jsonify({"reply": reply})
+
+
+@app.route("/api/agent/sessions/<session_id>", methods=["GET"])
+def agent_get_session(session_id):
+    agent_session = AgentSession.query.get_or_404(session_id)
+    messages = AgentMessage.query.filter_by(session_id=session_id).order_by(
+        AgentMessage.created_at).all()
+    return jsonify({
+        "id": agent_session.id,
+        "patient_id": agent_session.patient_id,
+        "language_used": agent_session.language_used,
+        "created_at": agent_session.created_at.isoformat() if agent_session.created_at else None,
+        "messages": [{"role": m.role, "content": m.content or "",
+                      "created_at": m.created_at.isoformat() if m.created_at else None}
+                     for m in messages if m.role in ("user", "assistant")],
+    })
+
+
+# ---------------------------------------------------------------------------
+# API Routes — Family Members
+# ---------------------------------------------------------------------------
+
+@app.route("/api/family", methods=["GET"])
+def list_family():
+    patient_id = request.args.get("patient_id")
+    if not patient_id:
+        return jsonify({"error": "patient_id required"}), 400
+    return jsonify(tool_get_family_members(patient_id))
+
+
+@app.route("/api/family", methods=["POST"])
+def create_family_member():
+    data = request.json or {}
+    patient_id = data.get("patient_id")
+    if not patient_id:
+        return jsonify({"error": "patient_id required"}), 400
+    result = tool_add_family_member(patient_id, data.get("name", ""),
+                                    data.get("relationship", ""),
+                                    data.get("dob", ""), data.get("notes", ""))
+    return jsonify(result), 201
+
+
+# ---------------------------------------------------------------------------
+# API Routes — Appointments
+# ---------------------------------------------------------------------------
+
+@app.route("/api/appointments", methods=["GET"])
+def list_appointments():
+    patient_id = request.args.get("patient_id")
+    if not patient_id:
+        return jsonify({"error": "patient_id required"}), 400
+    family_member_id = request.args.get("family_member_id")
+    return jsonify(tool_get_appointments(patient_id, family_member_id))
+
+
+# ---------------------------------------------------------------------------
+# API Routes — Medications
+# ---------------------------------------------------------------------------
+
+@app.route("/api/medications", methods=["GET"])
+def list_medications():
+    patient_id = request.args.get("patient_id")
+    if not patient_id:
+        return jsonify({"error": "patient_id required"}), 400
+    family_member_id = request.args.get("family_member_id")
+    active_only = request.args.get("active_only", "true").lower() != "false"
+    return jsonify(tool_get_medications(patient_id, family_member_id, active_only))
+
+
+# ---------------------------------------------------------------------------
+# API Routes — Health Summary
+# ---------------------------------------------------------------------------
+
+@app.route("/api/health-summary", methods=["GET"])
+def health_summary():
+    patient_id = request.args.get("patient_id")
+    if not patient_id:
+        return jsonify({"error": "patient_id required"}), 400
+    family_member_id = request.args.get("family_member_id")
+    return jsonify(tool_get_health_summary(patient_id, family_member_id))
+
+
+# ---------------------------------------------------------------------------
 # Serve Frontend
 # ---------------------------------------------------------------------------
 
@@ -868,14 +1684,26 @@ def serve_static(path):
 # ---------------------------------------------------------------------------
 
 with app.app_context():
+    # Migrate old appointment table if it has the wrong schema (from old booking system)
+    try:
+        cols = [row[1] for row in db.session.execute(
+            db.text("PRAGMA table_info(appointment)")).fetchall()]
+        if cols and "patient_id" not in cols:
+            # Old booking-system schema — rename it out of the way and recreate
+            db.session.execute(db.text("ALTER TABLE appointment RENAME TO old_booking_appointment"))
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+
     db.create_all()
+
     # Add is_urgent to session if DB existed before (SQLite)
     try:
         db.session.execute(db.text("ALTER TABLE session ADD COLUMN is_urgent BOOLEAN DEFAULT 0"))
         db.session.commit()
     except Exception:
         db.session.rollback()
-    # Ensure booking tables exist (idempotent via create_all above)
+    # Ensure all new tables exist (idempotent via create_all above)
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5001))

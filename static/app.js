@@ -62,9 +62,12 @@ function navigateTo(view) {
 
     if (view === 'doctor') loadSessions();
     if (view === 'checkin') showCheckinStep('checkin-setup');
+    if (view === 'agent') showAgentStep('agent-setup');
 
     stopCheckinSpeaking();
     stopCheckinVoice();
+    stopAgentSpeaking();
+    stopAgentVoice();
 }
 
 function showCheckinStep(stepId) {
@@ -81,6 +84,7 @@ async function init() {
         const res = await fetch(`${API}/api/languages`);
         state.languages = await res.json();
         populateCheckinLanguageDropdown();
+        populateAgentLanguageDropdown();
     } catch (e) {
         console.error('Failed to load languages', e);
     }
@@ -767,6 +771,607 @@ function formatSummaryHtml(text) {
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/^• /gm, '<span style="color:var(--color-doctor)">&#9679;</span> ');
     return html;
+}
+
+// ---------------------------------------------------------------------------
+// My Health Agent — State
+// ---------------------------------------------------------------------------
+
+let agentState = {
+    patientId: null,
+    sessionId: null,
+    langCode: 'en',
+    langName: 'English',
+    isAutoMode: true,
+    isSpeaking: false,
+    isListening: false,
+    medications: [],
+    appointments: [],
+    family: [],
+};
+
+let agentRec = null;
+let agentUtterance = null;
+let _medicationReminderInterval = null;
+
+// ---------------------------------------------------------------------------
+// My Health Agent — Language Dropdowns
+// ---------------------------------------------------------------------------
+
+function populateAgentLanguageDropdown() {
+    const sel = document.getElementById('agent-language');
+    if (!sel) return;
+    sel.innerHTML = '';
+    const grouped = {};
+    const groupOrder = [];
+    for (const [lang, data] of Object.entries(state.languages)) {
+        const g = data.group || 'Other';
+        if (!grouped[g]) { grouped[g] = []; groupOrder.push(g); }
+        grouped[g].push(lang);
+    }
+    for (const groupLabel of groupOrder) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = groupLabel;
+        for (const lang of grouped[groupLabel]) {
+            const opt = document.createElement('option');
+            opt.value = lang;
+            opt.textContent = lang;
+            optgroup.appendChild(opt);
+        }
+        sel.appendChild(optgroup);
+    }
+    updateAgentDialects();
+}
+
+function updateAgentDialects() {
+    const lang = document.getElementById('agent-language')?.value;
+    const sel = document.getElementById('agent-dialect');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— Select —</option>';
+    const dialects = state.languages[lang]?.dialects || [];
+    for (const d of dialects) {
+        const opt = document.createElement('option');
+        opt.value = d;
+        opt.textContent = d;
+        sel.appendChild(opt);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// My Health Agent — Setup & Session Start
+// ---------------------------------------------------------------------------
+
+async function handleAgentSetup(e) {
+    e.preventDefault();
+    const name = document.getElementById('agent-name').value.trim();
+    const language = document.getElementById('agent-language').value;
+
+    const langData = state.languages[language];
+    agentState.langCode = langData?.code || 'en';
+    agentState.langName = language;
+    agentState.isAutoMode = true;
+
+    showSpinner('Starting Aria — My Health Assistant…');
+
+    try {
+        // Create or reuse patient
+        const pRes = await fetch(`${API}/api/patients`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, preferred_language: language }),
+        });
+        const patient = await pRes.json();
+        agentState.patientId = patient.id;
+
+        // Start agent session
+        const sRes = await fetch(`${API}/api/agent/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ patient_id: patient.id, language, patient_name: name }),
+        });
+        const session = await sRes.json();
+        agentState.sessionId = session.session_id;
+
+        // Set up UI
+        document.getElementById('agent-messages').innerHTML = '';
+        document.getElementById('agent-input').value = '';
+        document.getElementById('agent-chat-title').textContent = name;
+        document.getElementById('agent-lang-badge').textContent = language;
+        document.getElementById('agent-dash-patient-name').textContent = name;
+        updateAgentAutoModeUI();
+
+        hideSpinner();
+        showAgentStep('agent-chat');
+
+        requestNotificationPermission();
+
+        appendAgentBubble('assistant', session.greeting);
+        if (agentState.isAutoMode) {
+            agentSpeakThenListen(session.greeting);
+        }
+
+        // Load dashboard data in background
+        loadAgentDashboard();
+    } catch (err) {
+        hideSpinner();
+        alert('Failed to start health assistant. Please check your connection.');
+        console.error(err);
+    }
+}
+
+function backToAgentSetup() {
+    stopAgentSpeaking();
+    stopAgentVoice();
+    agentState.patientId = null;
+    agentState.sessionId = null;
+    showAgentStep('agent-setup');
+}
+
+function showAgentStep(stepId) {
+    document.querySelectorAll('.agent-step').forEach(s => s.classList.remove('active'));
+    const el = document.getElementById(stepId);
+    if (el) el.classList.add('active');
+}
+
+function showAgentDashboard() {
+    showAgentStep('agent-dashboard');
+    loadAgentDashboard();
+}
+
+function backToAgentChat() {
+    showAgentStep('agent-chat');
+}
+
+// ---------------------------------------------------------------------------
+// My Health Agent — Chat Messaging
+// ---------------------------------------------------------------------------
+
+async function sendAgentMessage(textOverride) {
+    const input = document.getElementById('agent-input');
+    const text = (textOverride !== undefined ? textOverride : input.value).trim();
+    if (!text || !agentState.sessionId) return;
+
+    input.value = '';
+    input.style.height = 'auto';
+    appendAgentBubble('user', text);
+    showAgentTyping();
+
+    document.getElementById('btn-agent-send').disabled = true;
+
+    try {
+        const res = await fetch(`${API}/api/agent/sessions/${agentState.sessionId}/message`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text }),
+        });
+        const data = await res.json();
+        hideAgentTyping();
+
+        appendAgentBubble('assistant', data.reply);
+
+        if (agentState.isAutoMode) {
+            agentSpeakThenListen(data.reply);
+        }
+
+        // Refresh dashboard data after each message (tools may have run)
+        setTimeout(loadAgentDashboard, 800);
+    } catch (err) {
+        hideAgentTyping();
+        appendAgentBubble('assistant', '[Connection error — please try again.]');
+        console.error(err);
+    }
+
+    document.getElementById('btn-agent-send').disabled = false;
+}
+
+function handleAgentKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        stopAgentVoice();
+        sendAgentMessage();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// My Health Agent — Voice Loop (TTS → STT)
+// ---------------------------------------------------------------------------
+
+function agentSpeakThenListen(text) {
+    if (!('speechSynthesis' in window)) return;
+    stopAgentSpeaking();
+    stopAgentVoice();
+
+    setAgentVoiceIndicator('speaking');
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    const bcp47 = SPEECH_LANG_MAP[agentState.langCode] || 'en-SG';
+    utterance.lang = bcp47;
+    utterance.rate = 0.92;
+    utterance.pitch = 1;
+
+    const matched = findVoice(bcp47);
+    if (matched) utterance.voice = matched;
+
+    agentUtterance = utterance;
+    agentState.isSpeaking = true;
+
+    const onDone = () => {
+        agentState.isSpeaking = false;
+        agentUtterance = null;
+        setAgentVoiceIndicator('idle');
+        if (agentState.isAutoMode) setTimeout(() => startAgentListening(), 400);
+    };
+    utterance.onend = onDone;
+    utterance.onerror = onDone;
+
+    speechSynthesis.speak(utterance);
+}
+
+function stopAgentSpeaking() {
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    agentState.isSpeaking = false;
+    agentUtterance = null;
+}
+
+function startAgentListening() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition || agentState.isListening) return;
+
+    stopAgentVoice();
+
+    const rec = new SpeechRecognition();
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.lang = SPEECH_LANG_MAP[agentState.langCode] || 'en-SG';
+
+    agentState.isListening = true;
+    agentRec = rec;
+
+    setAgentVoiceIndicator('listening');
+    document.getElementById('btn-agent-mic').classList.add('recording');
+    document.getElementById('agent-voice-status').classList.add('active');
+
+    let finalTranscript = '';
+
+    rec.onresult = (event) => {
+        finalTranscript = '';
+        let interim = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const t = event.results[i][0].transcript;
+            if (event.results[i].isFinal) finalTranscript += t;
+            else interim += t;
+        }
+        const input = document.getElementById('agent-input');
+        input.value = finalTranscript + interim;
+        autoResize(input);
+        document.getElementById('agent-status-text').textContent =
+            interim ? 'Hearing you…' : 'Listening…';
+    };
+
+    rec.onend = () => {
+        agentState.isListening = false;
+        agentRec = null;
+        document.getElementById('btn-agent-mic').classList.remove('recording');
+        document.getElementById('agent-voice-status').classList.remove('active');
+        setAgentVoiceIndicator('idle');
+
+        if (finalTranscript.trim() && agentState.isAutoMode) {
+            setTimeout(() => sendAgentMessage(finalTranscript.trim()), 300);
+        }
+    };
+
+    rec.onerror = (event) => {
+        console.warn('Agent STT error:', event.error);
+        if (event.error === 'not-allowed') {
+            alert('Microphone access was denied. Please allow microphone access to use voice input.');
+        }
+        agentState.isListening = false;
+        agentRec = null;
+        document.getElementById('btn-agent-mic').classList.remove('recording');
+        document.getElementById('agent-voice-status').classList.remove('active');
+        setAgentVoiceIndicator('idle');
+    };
+
+    try { rec.start(); } catch (e) { console.error('Agent STT start error:', e); }
+}
+
+function stopAgentVoice() {
+    agentState.isListening = false;
+    if (agentRec) {
+        try { agentRec.stop(); } catch (e) { /* ignore */ }
+        agentRec = null;
+    }
+    const micBtn = document.getElementById('btn-agent-mic');
+    const statusBar = document.getElementById('agent-voice-status');
+    if (micBtn) micBtn.classList.remove('recording');
+    if (statusBar) statusBar.classList.remove('active');
+    setAgentVoiceIndicator('idle');
+}
+
+function toggleAgentVoice() {
+    if (agentState.isListening) {
+        stopAgentVoice();
+    } else {
+        stopAgentSpeaking();
+        startAgentListening();
+    }
+}
+
+function toggleAgentAutoMode() {
+    agentState.isAutoMode = !agentState.isAutoMode;
+    if (!agentState.isAutoMode) {
+        stopAgentSpeaking();
+        stopAgentVoice();
+    }
+    updateAgentAutoModeUI();
+}
+
+function updateAgentAutoModeUI() {
+    const btn = document.getElementById('btn-agent-auto-toggle');
+    const label = document.getElementById('agent-auto-mode-label');
+    if (!btn || !label) return;
+    if (agentState.isAutoMode) {
+        btn.classList.remove('auto-off');
+        label.textContent = 'Auto On';
+    } else {
+        btn.classList.add('auto-off');
+        label.textContent = 'Auto Off';
+    }
+}
+
+function setAgentVoiceIndicator(indicatorState) {
+    const indicator = document.getElementById('agent-voice-indicator');
+    const text = document.getElementById('agent-voice-status-text');
+    if (!indicator || !text) return;
+    if (indicatorState === 'idle') {
+        indicator.classList.add('hidden');
+    } else {
+        indicator.classList.remove('hidden');
+        text.textContent = indicatorState === 'speaking' ? 'Aria is speaking…' : 'Aria is listening…';
+    }
+}
+
+// ---------------------------------------------------------------------------
+// My Health Agent — Chat Bubble Helpers
+// ---------------------------------------------------------------------------
+
+function appendAgentBubble(role, text) {
+    const el = document.getElementById('agent-messages');
+    const bubble = document.createElement('div');
+    bubble.className = `chat-bubble ${role}`;
+
+    const label = document.createElement('span');
+    label.className = 'bubble-label';
+    label.textContent = role === 'assistant' ? 'Aria' : 'You';
+    bubble.appendChild(label);
+
+    const content = document.createElement('span');
+    content.className = 'bubble-text';
+    content.textContent = text;
+    bubble.appendChild(content);
+
+    el.appendChild(bubble);
+    el.scrollTop = el.scrollHeight;
+}
+
+function showAgentTyping() {
+    const el = document.getElementById('agent-messages');
+    const ind = document.createElement('div');
+    ind.className = 'typing-indicator';
+    ind.id = 'agent-typing';
+    ind.innerHTML = '<span></span><span></span><span></span>';
+    el.appendChild(ind);
+    el.scrollTop = el.scrollHeight;
+}
+
+function hideAgentTyping() {
+    const t = document.getElementById('agent-typing');
+    if (t) t.remove();
+}
+
+// ---------------------------------------------------------------------------
+// My Health Agent — Dashboard
+// ---------------------------------------------------------------------------
+
+async function loadAgentDashboard() {
+    if (!agentState.patientId) return;
+
+    try {
+        const res = await fetch(`${API}/api/health-summary?patient_id=${agentState.patientId}`);
+        const data = await res.json();
+
+        agentState.appointments = data.upcoming_appointments || [];
+        agentState.medications = data.active_medications || [];
+        agentState.family = data.family_members || [];
+
+        renderDashboardFull(data);
+        renderDashboardStrip(data);
+        scheduleMedicationReminders(agentState.medications);
+    } catch (err) {
+        console.error('Failed to load health summary', err);
+    }
+}
+
+function renderDashboardFull(data) {
+    const apptEl = document.getElementById('dash-appointments');
+    const medEl = document.getElementById('dash-medications');
+    const famEl = document.getElementById('dash-family');
+    if (!apptEl) return;
+
+    renderAppointmentCards(data.upcoming_appointments || [], apptEl);
+    renderMedicationCards(data.active_medications || [], medEl);
+    renderFamilyCards(data.family_members || [], famEl);
+}
+
+function renderDashboardStrip(data) {
+    const stripEl = document.getElementById('strip-cards');
+    if (!stripEl) return;
+
+    const appts = data.upcoming_appointments || [];
+    const meds = data.active_medications || [];
+
+    let html = '';
+
+    if (appts.length > 0) {
+        const a = appts[0];
+        html += `<div class="health-card appointment">
+            <div class="health-card-icon">📅</div>
+            <div class="health-card-body">
+                <div class="health-card-title">${escapeHtml(a.doctor)}</div>
+                <div class="health-card-sub">${escapeHtml(a.datetime)}</div>
+            </div>
+        </div>`;
+    }
+
+    if (meds.length > 0) {
+        const m = meds[0];
+        const nextReminder = m.reminder_times && m.reminder_times.length ? m.reminder_times[0] : '';
+        html += `<div class="health-card medication">
+            <div class="health-card-icon">💊</div>
+            <div class="health-card-body">
+                <div class="health-card-title">${escapeHtml(m.name)} ${escapeHtml(m.dosage)}</div>
+                <div class="health-card-sub">${nextReminder ? 'Next: ' + nextReminder : escapeHtml(m.frequency)}</div>
+            </div>
+        </div>`;
+    }
+
+    if (appts.length > 1 || meds.length > 1) {
+        html += `<div class="health-card summary-card" onclick="showAgentDashboard()" style="cursor:pointer;">
+            <div class="health-card-icon">➕</div>
+            <div class="health-card-body">
+                <div class="health-card-title">${appts.length} appointments</div>
+                <div class="health-card-sub">${meds.length} medications</div>
+            </div>
+        </div>`;
+    }
+
+    stripEl.innerHTML = html;
+
+    if (html) {
+        document.getElementById('agent-dashboard-strip').classList.remove('hidden');
+    }
+}
+
+function toggleDashboardStrip() {
+    const strip = document.getElementById('agent-dashboard-strip');
+    if (strip) strip.classList.toggle('hidden');
+}
+
+function renderAppointmentCards(appointments, container) {
+    if (!container) return;
+    if (!appointments.length) {
+        container.innerHTML = '<p class="text-muted" style="font-size:0.85rem;">No upcoming appointments.</p>';
+        return;
+    }
+    container.innerHTML = appointments.map(a => `
+        <div class="health-card appointment">
+            <div class="health-card-icon">📅</div>
+            <div class="health-card-body">
+                <div class="health-card-title">${escapeHtml(a.doctor)}</div>
+                <div class="health-card-sub">${escapeHtml(a.specialty)} · ${escapeHtml(a.datetime)}</div>
+                ${a.reason ? `<div class="health-card-note">${escapeHtml(a.reason)}</div>` : ''}
+                ${a.for && a.for !== 'self' ? `<div class="health-card-for">For: ${escapeHtml(a.for)}</div>` : ''}
+            </div>
+        </div>`).join('');
+}
+
+function renderMedicationCards(medications, container) {
+    if (!container) return;
+    if (!medications.length) {
+        container.innerHTML = '<p class="text-muted" style="font-size:0.85rem;">No active medications.</p>';
+        return;
+    }
+    container.innerHTML = medications.map(m => {
+        const reminders = m.reminder_times || [];
+        return `<div class="health-card medication">
+            <div class="health-card-icon">💊</div>
+            <div class="health-card-body">
+                <div class="health-card-title">${escapeHtml(m.name)} ${escapeHtml(m.dosage)}</div>
+                <div class="health-card-sub">${escapeHtml(m.frequency)}</div>
+                ${reminders.length ? `<div class="health-card-note">Reminders: ${reminders.join(', ')}</div>` : ''}
+                ${m.for && m.for !== 'self' ? `<div class="health-card-for">For: ${escapeHtml(m.for)}</div>` : ''}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function renderFamilyCards(members, container) {
+    if (!container) return;
+    if (!members.length) {
+        container.innerHTML = '<p class="text-muted" style="font-size:0.85rem;">No family members registered.</p>';
+        return;
+    }
+    container.innerHTML = members.map(f => `
+        <div class="health-card family">
+            <div class="health-card-icon">👤</div>
+            <div class="health-card-body">
+                <div class="health-card-title">${escapeHtml(f.name)}</div>
+                <div class="health-card-sub">${escapeHtml(f.relationship)}</div>
+                ${f.date_of_birth ? `<div class="health-card-note">DOB: ${escapeHtml(f.date_of_birth)}</div>` : ''}
+            </div>
+        </div>`).join('');
+}
+
+// ---------------------------------------------------------------------------
+// My Health Agent — Medication Reminders (Browser Notifications)
+// ---------------------------------------------------------------------------
+
+function requestNotificationPermission() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+        const banner = document.getElementById('notification-permission-banner');
+        if (banner) banner.classList.remove('hidden');
+    } else if (Notification.permission === 'granted') {
+        startMedicationReminderLoop();
+    }
+}
+
+async function enableNotifications() {
+    if (!('Notification' in window)) return;
+    const permission = await Notification.requestPermission();
+    const banner = document.getElementById('notification-permission-banner');
+    if (banner) banner.classList.add('hidden');
+    if (permission === 'granted') {
+        startMedicationReminderLoop();
+    }
+}
+
+function startMedicationReminderLoop() {
+    if (_medicationReminderInterval) return;
+    _medicationReminderInterval = setInterval(checkMedicationReminders, 60000);
+}
+
+function scheduleMedicationReminders(meds) {
+    agentState.medications = meds;
+    if (Notification.permission === 'granted') {
+        startMedicationReminderLoop();
+    }
+}
+
+function checkMedicationReminders() {
+    if (Notification.permission !== 'granted') return;
+    if (!agentState.medications.length) return;
+
+    const now = new Date();
+    const hhmm = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+    const todayKey = now.toDateString();
+
+    const notified = JSON.parse(sessionStorage.getItem('medNotifiedToday') || '{}');
+
+    for (const med of agentState.medications) {
+        const reminders = med.reminder_times || [];
+        for (const time of reminders) {
+            const notifyKey = `${med.id}_${time}_${todayKey}`;
+            if (time === hhmm && !notified[notifyKey]) {
+                notified[notifyKey] = true;
+                sessionStorage.setItem('medNotifiedToday', JSON.stringify(notified));
+                new Notification('Medication Reminder', {
+                    body: `Time to take your ${med.name} ${med.dosage}`,
+                    icon: '/favicon.ico',
+                });
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
