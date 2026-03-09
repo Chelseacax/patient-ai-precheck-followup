@@ -19,6 +19,7 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from openai import OpenAI, AuthenticationError
 from dotenv import load_dotenv
+from services.meralion_client import MeralionError, transcribe_audio_bytes
 
 load_dotenv()
 
@@ -1014,6 +1015,53 @@ def _build_agent_system_prompt(language, patient_name):
 @app.route("/api/languages", methods=["GET"])
 def get_languages():
     return jsonify(SUPPORTED_LANGUAGES)
+
+
+@app.route("/api/voice", methods=["POST"])
+def voice_to_text():
+    """
+    Transcribe uploaded audio via MERaLiON STT.
+
+    Expects multipart/form-data:
+      - audio: uploaded file
+      - language (optional): language hint
+    """
+    audio_file = request.files.get("audio")
+    if not audio_file:
+        return jsonify({"error": "Missing audio file. Use multipart/form-data with field 'audio'."}), 400
+
+    audio_bytes = audio_file.read()
+    if not audio_bytes:
+        return jsonify({"error": "Uploaded audio file is empty."}), 400
+
+    filename = (audio_file.filename or "voice.wav").strip() or "voice.wav"
+    content_type = audio_file.mimetype or "audio/wav"
+    language = (request.form.get("language", "") or "").strip() or None
+
+    try:
+        result = transcribe_audio_bytes(
+            audio_bytes=audio_bytes,
+            filename=filename,
+            content_type=content_type,
+            language=language,
+        )
+    except MeralionError as e:
+        message = str(e)
+        status = 503 if "not configured" in message.lower() else 502
+        return jsonify({"error": message}), status
+    except Exception as e:
+        app.logger.error("Unexpected MERaLiON STT error: %s", e)
+        return jsonify({"error": "Voice transcription failed unexpectedly."}), 500
+
+    transcript = (
+        (result.get("text") if isinstance(result, dict) else None)
+        or (result.get("transcript") if isinstance(result, dict) else None)
+        or ""
+    ).strip()
+    if not transcript:
+        return jsonify({"error": "MERaLiON returned no transcript.", "result": result}), 502
+
+    return jsonify({"text": transcript, "result": result})
 
 
 # ---------------------------------------------------------------------------
