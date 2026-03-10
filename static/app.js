@@ -14,7 +14,8 @@ const SPEECH_LANG_MAP = {
     'zh':           'zh-CN',
     'ms':           'ms-MY',
     'ta':           'ta-SG',
-    'zh-cantonese': 'zh-HK',
+    'zh-cantonese': 'yue-HK',
+    'nan':          'nan-TW',
     'hi':           'hi-IN',
     'tl':           'fil-PH',
     'vi':           'vi-VN',
@@ -25,6 +26,25 @@ const SPEECH_LANG_MAP = {
     'km':           'km-KH',
 };
 
+const DIALECT_SPEECH_LANG_MAP = {
+    'singlish': 'en-SG',
+    'standard singapore english': 'en-SG',
+    '新加坡华语 (singapore mandarin)': 'zh-SG',
+    '标准普通话 (standard mandarin)': 'zh-CN',
+    '新加坡广东话 (singapore cantonese)': 'yue-SG',
+    '香港广东话 (hong kong cantonese)': 'yue-HK',
+    'singapore hokkien': 'nan-SG',
+    'taiwanese hokkien': 'nan-TW',
+};
+
+function resolveSpeechLang(code, dialect = '') {
+    const key = (dialect || '').trim().toLowerCase();
+    if (key && DIALECT_SPEECH_LANG_MAP[key]) {
+        return DIALECT_SPEECH_LANG_MAP[key];
+    }
+    return SPEECH_LANG_MAP[code] || 'en-SG';
+}
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -34,12 +54,15 @@ let state = {
     currentView: 'home',
 };
 
+let useMeralionStt = false;
+
 // Voice check-in state
 let checkinState = {
     patientId: null,
     sessionId: null,
     langCode: 'en',       // BCP-47 base code
     langName: 'English',
+    dialect: '',
     isAutoMode: true,     // auto speak→listen→send loop
     isSpeaking: false,
     isListening: false,
@@ -47,6 +70,10 @@ let checkinState = {
 
 let checkinRec = null;        // active SpeechRecognition for check-in
 let checkinUtterance = null;  // active TTS utterance for check-in
+let checkinAudio = null;      // active cloud TTS audio element
+let checkinMediaStream = null;
+let checkinChunks = [];
+let checkinStopTimer = null;
 
 // ---------------------------------------------------------------------------
 // Navigation
@@ -89,6 +116,19 @@ async function init() {
         console.error('Failed to load languages', e);
     }
     checkApiKey();
+    checkMeralionHealth();
+}
+
+async function checkMeralionHealth() {
+    try {
+        const res = await fetch(`${API}/api/voice/health`);
+        const data = await res.json();
+        useMeralionStt = !!data.meralion_available;
+        console.log(`MERaLiON STT: ${useMeralionStt ? 'available' : 'unavailable, using browser STT'}`);
+    } catch (e) {
+        useMeralionStt = false;
+        console.warn('MERaLiON health check failed, using browser STT', e);
+    }
 }
 
 async function checkApiKey() {
@@ -198,6 +238,7 @@ async function handleCheckinSetup(e) {
     const langData = state.languages[language];
     checkinState.langCode = langData?.code || 'en';
     checkinState.langName = language;
+    checkinState.dialect = dialect || '';
     checkinState.isAutoMode = true;
 
     showSpinner('Starting your check-in with Aria…');
@@ -345,38 +386,64 @@ async function completeCheckin() {
 // ---------------------------------------------------------------------------
 
 function checkinSpeakThenListen(text) {
-    if (!('speechSynthesis' in window)) return;
+    if (!text) return;
     stopCheckinSpeaking();
     stopCheckinVoice();
 
     setCheckinVoiceIndicator('speaking');
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    const bcp47 = SPEECH_LANG_MAP[checkinState.langCode] || 'en-SG';
-    utterance.lang = bcp47;
-    utterance.rate = 0.92;
-    utterance.pitch = 1;
-
-    const matched = findVoice(bcp47);
-    if (matched) utterance.voice = matched;
-
-    checkinUtterance = utterance;
+    const bcp47 = resolveSpeechLang(checkinState.langCode, checkinState.dialect);
     checkinState.isSpeaking = true;
 
     const onDone = () => {
         checkinState.isSpeaking = false;
         checkinUtterance = null;
+        checkinAudio = null;
         setCheckinVoiceIndicator('idle');
         if (checkinState.isAutoMode) setTimeout(() => startCheckinListening(), 400);
     };
-    utterance.onend  = onDone;
-    utterance.onerror = onDone;
 
-    speechSynthesis.speak(utterance);
+    playCloudTts(text, bcp47).then(async ({ audio, url }) => {
+        checkinAudio = audio;
+        audio.onended = () => {
+            URL.revokeObjectURL(url);
+            onDone();
+        };
+        audio.onerror = () => {
+            URL.revokeObjectURL(url);
+            onDone();
+        };
+        try {
+            await audio.play();
+        } catch (e) {
+            URL.revokeObjectURL(url);
+            throw new Error(`Cloud TTS playback failed: ${e.message || e}`);
+        }
+    }).catch((cloudErr) => {
+        console.warn('Cloud TTS unavailable, falling back to browser TTS:', cloudErr);
+        if (!('speechSynthesis' in window)) {
+            onDone();
+            return;
+        }
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = bcp47;
+        utterance.rate = 0.92;
+        utterance.pitch = 1;
+        const matched = findVoice(bcp47);
+        if (matched) utterance.voice = matched;
+        checkinUtterance = utterance;
+        utterance.onend = onDone;
+        utterance.onerror = onDone;
+        speechSynthesis.speak(utterance);
+    });
 }
 
 function stopCheckinSpeaking() {
     if ('speechSynthesis' in window) speechSynthesis.cancel();
+    if (checkinAudio) {
+        try { checkinAudio.pause(); } catch (e) { /* ignore */ }
+        checkinAudio = null;
+    }
     checkinState.isSpeaking = false;
     checkinUtterance = null;
 }
@@ -398,27 +465,82 @@ function findVoice(bcp47) {
            null;
 }
 
+async function playCloudTts(text, languageCode, pitch = 0, speakingRate = 0.92) {
+    const res = await fetch(`${API}/api/tts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            text,
+            language_code: languageCode,
+            pitch,
+            speaking_rate: speakingRate,
+        }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Cloud TTS failed (${res.status})`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    return { audio, url };
+}
+
+async function transcribeAudioBlob(audioBlob, languageCode) {
+    const form = new FormData();
+    const ext = audioBlob.type && audioBlob.type.includes('wav') ? 'wav' : 'webm';
+    form.append('audio', audioBlob, `voice.${ext}`);
+    if (languageCode) form.append('language', languageCode);
+
+    const res = await fetch(`${API}/api/voice`, {
+        method: 'POST',
+        body: form,
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data.error || `Voice transcription failed (${res.status})`);
+    }
+
+    const text = (data.text || '').trim();
+    if (!text) throw new Error('No speech detected');
+    return text;
+}
+
 // ---------------------------------------------------------------------------
 // Check-In — STT (Speech-to-Text)
+// Dual-path: MERaLiON (MediaRecorder → /api/voice) or Browser STT fallback
 // ---------------------------------------------------------------------------
 
 function startCheckinListening() {
+    if (checkinState.isListening) return;
+    if (useMeralionStt) {
+        _startCheckinMeralion();
+    } else {
+        _startCheckinBrowserStt();
+    }
+}
+
+function _startCheckinBrowserStt() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition || checkinState.isListening) return;
+    if (!SpeechRecognition) {
+        alert('Speech recognition is not supported in this browser.');
+        return;
+    }
 
     stopCheckinVoice();
 
     const rec = new SpeechRecognition();
-    rec.continuous = false;   // auto-stops on silence → onend fires → sends message
+    rec.continuous = false;
     rec.interimResults = true;
-    rec.lang = SPEECH_LANG_MAP[checkinState.langCode] || 'en-SG';
+    rec.lang = resolveSpeechLang(checkinState.langCode, checkinState.dialect);
 
     checkinState.isListening = true;
     checkinRec = rec;
-
     setCheckinVoiceIndicator('listening');
     document.getElementById('btn-checkin-mic').classList.add('recording');
     document.getElementById('checkin-voice-status').classList.add('active');
+    document.getElementById('checkin-status-text').textContent = 'Listening…';
 
     let finalTranscript = '';
 
@@ -450,7 +572,7 @@ function startCheckinListening() {
     };
 
     rec.onerror = (event) => {
-        console.warn('Check-in STT error:', event.error);
+        console.warn('Check-in browser STT error:', event.error);
         if (event.error === 'not-allowed') {
             alert('Microphone access was denied. Please allow microphone access to use voice input.');
         }
@@ -461,14 +583,95 @@ function startCheckinListening() {
         setCheckinVoiceIndicator('idle');
     };
 
-    try { rec.start(); } catch (e) { console.error('STT start error:', e); }
+    try { rec.start(); } catch (e) { console.error('Browser STT start error:', e); }
+}
+
+async function _startCheckinMeralion() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+        _startCheckinBrowserStt();
+        return;
+    }
+
+    stopCheckinVoice();
+
+    try {
+        checkinMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const preferredType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+            ? 'audio/webm;codecs=opus' : undefined;
+        const rec = preferredType
+            ? new MediaRecorder(checkinMediaStream, { mimeType: preferredType })
+            : new MediaRecorder(checkinMediaStream);
+
+        checkinChunks = [];
+        checkinRec = rec;
+        checkinState.isListening = true;
+        setCheckinVoiceIndicator('listening');
+        document.getElementById('btn-checkin-mic').classList.add('recording');
+        document.getElementById('checkin-voice-status').classList.add('active');
+        document.getElementById('checkin-status-text').textContent = 'Listening (MERaLiON)…';
+
+        rec.ondataavailable = (event) => {
+            if (event.data && event.data.size > 0) checkinChunks.push(event.data);
+        };
+
+        rec.onstop = async () => {
+            const blob = new Blob(checkinChunks, { type: rec.mimeType || 'audio/webm' });
+            checkinChunks = [];
+            if (checkinMediaStream) {
+                checkinMediaStream.getTracks().forEach(t => t.stop());
+                checkinMediaStream = null;
+            }
+            checkinState.isListening = false;
+            checkinRec = null;
+            document.getElementById('btn-checkin-mic').classList.remove('recording');
+            document.getElementById('checkin-voice-status').classList.remove('active');
+            setCheckinVoiceIndicator('idle');
+            if (!blob.size) return;
+
+            try {
+                document.getElementById('checkin-status-text').textContent = 'Transcribing…';
+                const transcript = await transcribeAudioBlob(blob, checkinState.langCode);
+                document.getElementById('checkin-input').value = transcript;
+                autoResize(document.getElementById('checkin-input'));
+                document.getElementById('checkin-status-text').textContent = 'Ready';
+                if (checkinState.isAutoMode) setTimeout(() => sendCheckinMessage(transcript), 300);
+            } catch (e) {
+                console.error('MERaLiON STT error, disabling for session:', e);
+                useMeralionStt = false;
+                document.getElementById('checkin-status-text').textContent = 'MERaLiON unavailable — switched to browser STT';
+            }
+        };
+
+        rec.start();
+        const maxMs = checkinState.isAutoMode ? 6500 : 12000;
+        checkinStopTimer = setTimeout(() => stopCheckinVoice(), maxMs);
+    } catch (e) {
+        console.error('Check-in microphone error:', e);
+        alert('Microphone access was denied.');
+        checkinState.isListening = false;
+        checkinRec = null;
+        if (checkinMediaStream) {
+            checkinMediaStream.getTracks().forEach(t => t.stop());
+            checkinMediaStream = null;
+        }
+        document.getElementById('btn-checkin-mic').classList.remove('recording');
+        document.getElementById('checkin-voice-status').classList.remove('active');
+        setCheckinVoiceIndicator('idle');
+    }
 }
 
 function stopCheckinVoice() {
     checkinState.isListening = false;
+    if (checkinStopTimer) {
+        clearTimeout(checkinStopTimer);
+        checkinStopTimer = null;
+    }
     if (checkinRec) {
         try { checkinRec.stop(); } catch (e) { /* ignore */ }
-        checkinRec = null;
+    }
+    if (checkinMediaStream) {
+        checkinMediaStream.getTracks().forEach(t => t.stop());
+        checkinMediaStream = null;
     }
     const micBtn = document.getElementById('btn-checkin-mic');
     const statusBar = document.getElementById('checkin-voice-status');
@@ -782,6 +985,7 @@ let agentState = {
     sessionId: null,
     langCode: 'en',
     langName: 'English',
+    dialect: '',
     isAutoMode: true,
     isSpeaking: false,
     isListening: false,
@@ -792,7 +996,11 @@ let agentState = {
 
 let agentRec = null;
 let agentUtterance = null;
+let agentAudio = null;
 let _medicationReminderInterval = null;
+let agentMediaStream = null;
+let agentChunks = [];
+let agentStopTimer = null;
 
 // ---------------------------------------------------------------------------
 // My Health Agent — Language Dropdowns
@@ -845,10 +1053,12 @@ async function handleAgentSetup(e) {
     e.preventDefault();
     const name = document.getElementById('agent-name').value.trim();
     const language = document.getElementById('agent-language').value;
+    const dialect = document.getElementById('agent-dialect')?.value || '';
 
     const langData = state.languages[language];
     agentState.langCode = langData?.code || 'en';
     agentState.langName = language;
+    agentState.dialect = dialect;
     agentState.isAutoMode = true;
 
     showSpinner('Starting Aria — My Health Assistant…');
@@ -977,59 +1187,96 @@ function handleAgentKey(e) {
 // ---------------------------------------------------------------------------
 
 function agentSpeakThenListen(text) {
-    if (!('speechSynthesis' in window)) return;
+    if (!text) return;
     stopAgentSpeaking();
     stopAgentVoice();
 
     setAgentVoiceIndicator('speaking');
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    const bcp47 = SPEECH_LANG_MAP[agentState.langCode] || 'en-SG';
-    utterance.lang = bcp47;
-    utterance.rate = 0.92;
-    utterance.pitch = 1;
-
-    const matched = findVoice(bcp47);
-    if (matched) utterance.voice = matched;
-
-    agentUtterance = utterance;
+    const bcp47 = resolveSpeechLang(agentState.langCode, agentState.dialect);
     agentState.isSpeaking = true;
 
     const onDone = () => {
         agentState.isSpeaking = false;
         agentUtterance = null;
+        agentAudio = null;
         setAgentVoiceIndicator('idle');
         if (agentState.isAutoMode) setTimeout(() => startAgentListening(), 400);
     };
-    utterance.onend = onDone;
-    utterance.onerror = onDone;
 
-    speechSynthesis.speak(utterance);
+    playCloudTts(text, bcp47).then(async ({ audio, url }) => {
+        agentAudio = audio;
+        audio.onended = () => {
+            URL.revokeObjectURL(url);
+            onDone();
+        };
+        audio.onerror = () => {
+            URL.revokeObjectURL(url);
+            onDone();
+        };
+        try {
+            await audio.play();
+        } catch (e) {
+            URL.revokeObjectURL(url);
+            throw new Error(`Cloud TTS playback failed: ${e.message || e}`);
+        }
+    }).catch((cloudErr) => {
+        console.warn('Cloud TTS unavailable, falling back to browser TTS:', cloudErr);
+        if (!('speechSynthesis' in window)) {
+            onDone();
+            return;
+        }
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = bcp47;
+        utterance.rate = 0.92;
+        utterance.pitch = 1;
+        const matched = findVoice(bcp47);
+        if (matched) utterance.voice = matched;
+        agentUtterance = utterance;
+        utterance.onend = onDone;
+        utterance.onerror = onDone;
+        speechSynthesis.speak(utterance);
+    });
 }
 
 function stopAgentSpeaking() {
     if ('speechSynthesis' in window) speechSynthesis.cancel();
+    if (agentAudio) {
+        try { agentAudio.pause(); } catch (e) { /* ignore */ }
+        agentAudio = null;
+    }
     agentState.isSpeaking = false;
     agentUtterance = null;
 }
 
 function startAgentListening() {
+    if (agentState.isListening) return;
+    if (useMeralionStt) {
+        _startAgentMeralion();
+    } else {
+        _startAgentBrowserStt();
+    }
+}
+
+function _startAgentBrowserStt() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition || agentState.isListening) return;
+    if (!SpeechRecognition) {
+        alert('Speech recognition is not supported in this browser.');
+        return;
+    }
 
     stopAgentVoice();
 
     const rec = new SpeechRecognition();
     rec.continuous = false;
     rec.interimResults = true;
-    rec.lang = SPEECH_LANG_MAP[agentState.langCode] || 'en-SG';
+    rec.lang = resolveSpeechLang(agentState.langCode, agentState.dialect);
 
     agentState.isListening = true;
     agentRec = rec;
-
     setAgentVoiceIndicator('listening');
     document.getElementById('btn-agent-mic').classList.add('recording');
     document.getElementById('agent-voice-status').classList.add('active');
+    document.getElementById('agent-status-text').textContent = 'Listening…';
 
     let finalTranscript = '';
 
@@ -1061,7 +1308,7 @@ function startAgentListening() {
     };
 
     rec.onerror = (event) => {
-        console.warn('Agent STT error:', event.error);
+        console.warn('Agent browser STT error:', event.error);
         if (event.error === 'not-allowed') {
             alert('Microphone access was denied. Please allow microphone access to use voice input.');
         }
@@ -1072,14 +1319,95 @@ function startAgentListening() {
         setAgentVoiceIndicator('idle');
     };
 
-    try { rec.start(); } catch (e) { console.error('Agent STT start error:', e); }
+    try { rec.start(); } catch (e) { console.error('Agent browser STT start error:', e); }
+}
+
+async function _startAgentMeralion() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+        _startAgentBrowserStt();
+        return;
+    }
+
+    stopAgentVoice();
+
+    try {
+        agentMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const preferredType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+            ? 'audio/webm;codecs=opus' : undefined;
+        const rec = preferredType
+            ? new MediaRecorder(agentMediaStream, { mimeType: preferredType })
+            : new MediaRecorder(agentMediaStream);
+
+        agentChunks = [];
+        agentRec = rec;
+        agentState.isListening = true;
+        setAgentVoiceIndicator('listening');
+        document.getElementById('btn-agent-mic').classList.add('recording');
+        document.getElementById('agent-voice-status').classList.add('active');
+        document.getElementById('agent-status-text').textContent = 'Listening (MERaLiON)…';
+
+        rec.ondataavailable = (event) => {
+            if (event.data && event.data.size > 0) agentChunks.push(event.data);
+        };
+
+        rec.onstop = async () => {
+            const blob = new Blob(agentChunks, { type: rec.mimeType || 'audio/webm' });
+            agentChunks = [];
+            if (agentMediaStream) {
+                agentMediaStream.getTracks().forEach(t => t.stop());
+                agentMediaStream = null;
+            }
+            agentState.isListening = false;
+            agentRec = null;
+            document.getElementById('btn-agent-mic').classList.remove('recording');
+            document.getElementById('agent-voice-status').classList.remove('active');
+            setAgentVoiceIndicator('idle');
+            if (!blob.size) return;
+
+            try {
+                document.getElementById('agent-status-text').textContent = 'Transcribing…';
+                const transcript = await transcribeAudioBlob(blob, agentState.langCode);
+                document.getElementById('agent-input').value = transcript;
+                autoResize(document.getElementById('agent-input'));
+                document.getElementById('agent-status-text').textContent = 'Ready';
+                if (agentState.isAutoMode) setTimeout(() => sendAgentMessage(transcript), 300);
+            } catch (e) {
+                console.error('Agent MERaLiON STT error, disabling for session:', e);
+                useMeralionStt = false;
+                document.getElementById('agent-status-text').textContent = 'MERaLiON unavailable — switched to browser STT';
+            }
+        };
+
+        rec.start();
+        const maxMs = agentState.isAutoMode ? 6500 : 12000;
+        agentStopTimer = setTimeout(() => stopAgentVoice(), maxMs);
+    } catch (e) {
+        console.error('Agent microphone error:', e);
+        alert('Microphone access was denied.');
+        agentState.isListening = false;
+        agentRec = null;
+        if (agentMediaStream) {
+            agentMediaStream.getTracks().forEach(t => t.stop());
+            agentMediaStream = null;
+        }
+        document.getElementById('btn-agent-mic').classList.remove('recording');
+        document.getElementById('agent-voice-status').classList.remove('active');
+        setAgentVoiceIndicator('idle');
+    }
 }
 
 function stopAgentVoice() {
     agentState.isListening = false;
+    if (agentStopTimer) {
+        clearTimeout(agentStopTimer);
+        agentStopTimer = null;
+    }
     if (agentRec) {
         try { agentRec.stop(); } catch (e) { /* ignore */ }
-        agentRec = null;
+    }
+    if (agentMediaStream) {
+        agentMediaStream.getTracks().forEach(t => t.stop());
+        agentMediaStream = null;
     }
     const micBtn = document.getElementById('btn-agent-mic');
     const statusBar = document.getElementById('agent-voice-status');

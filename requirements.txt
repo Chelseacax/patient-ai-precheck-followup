@@ -6,3 +6,4 @@ anthropic>=0.40.0
 python-dotenv==1.0.1
 gunicorn==23.0.0
 requests
+google-cloud-texttospeech

@@ -14,12 +14,16 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from openai import OpenAI, AuthenticationError
 from dotenv import load_dotenv
-from services.meralion_client import MeralionError, transcribe_audio_bytes
+from services.meralion_client import MeralionError, transcribe_audio_bytes, check_reachable as meralion_reachable
+try:
+    from google.cloud import texttospeech
+except Exception:
+    texttospeech = None
 
 load_dotenv()
 
@@ -233,11 +237,16 @@ SUPPORTED_LANGUAGES = {
         "group": "Singapore Official Languages",
     },
     # --- Singapore Chinese Dialects ---
-    # Only Cantonese is included: it has a standard written form that SEA-LION handles well.
-    # Hokkien, Teochew, Hakka, and Hainanese have no standard written form — LLMs hallucinate.
+    # Cantonese and Hokkien are exposed for speech capture.
+    # Note: Hokkien has limited written-form standardization, so downstream LLM quality may vary.
     "广东话 (Cantonese)": {
         "dialects": ["新加坡广东话 (Singapore Cantonese)", "香港广东话 (Hong Kong Cantonese)"],
         "code": "zh-cantonese",
+        "group": "Singapore Chinese Dialects",
+    },
+    "福建话 (Hokkien)": {
+        "dialects": ["Singapore Hokkien", "Taiwanese Hokkien"],
+        "code": "nan",
         "group": "Singapore Chinese Dialects",
     },
     # --- Southeast Asian Languages ---
@@ -1017,6 +1026,83 @@ def get_languages():
     return jsonify(SUPPORTED_LANGUAGES)
 
 
+@app.route("/api/voice/health", methods=["GET"])
+def voice_health():
+    """Quick check: can we reach MERaLiON STT?"""
+    reachable = meralion_reachable()
+    return jsonify({"meralion_available": reachable})
+
+
+def _normalize_tts_language(language_code):
+    """
+    Normalize requested language code to Google TTS-supported variants.
+    """
+    code = (language_code or "en-SG").strip()
+    overrides = {
+        "zh-SG": "cmn-CN",
+        "zh-cantonese": "yue-HK",
+        "yue-SG": "yue-HK",
+        "nan": "cmn-CN",      # No native Hokkien voice in Google TTS
+        "nan-SG": "cmn-CN",   # fallback to Mandarin
+        "nan-TW": "cmn-CN",   # fallback to Mandarin
+    }
+    return overrides.get(code, code)
+
+
+@app.route("/api/tts", methods=["POST"])
+def text_to_speech():
+    """
+    Synthesize speech using Google Cloud Text-to-Speech.
+    Uses ADC credentials configured via gcloud auth application-default login.
+    """
+    if texttospeech is None:
+        return jsonify({"error": "google-cloud-texttospeech package is not installed."}), 500
+
+    data = request.get_json() or {}
+    text = (data.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": "text is required"}), 400
+
+    language_code = _normalize_tts_language(data.get("language_code", "en-SG"))
+    voice_name = (data.get("voice_name") or "").strip() or None
+    speaking_rate = data.get("speaking_rate", 0.92)
+    pitch = data.get("pitch", 0.0)
+
+    try:
+        speaking_rate = float(speaking_rate)
+        pitch = float(pitch)
+    except (TypeError, ValueError):
+        return jsonify({"error": "speaking_rate and pitch must be numbers"}), 400
+
+    speaking_rate = max(0.25, min(4.0, speaking_rate))
+    pitch = max(-20.0, min(20.0, pitch))
+
+    try:
+        client = texttospeech.TextToSpeechClient()
+        voice_kwargs = {"language_code": language_code}
+        if voice_name:
+            voice_kwargs["name"] = voice_name
+
+        response = client.synthesize_speech(
+            input=texttospeech.SynthesisInput(text=text),
+            voice=texttospeech.VoiceSelectionParams(**voice_kwargs),
+            audio_config=texttospeech.AudioConfig(
+                audio_encoding=texttospeech.AudioEncoding.MP3,
+                speaking_rate=speaking_rate,
+                pitch=pitch,
+            ),
+        )
+
+        return Response(
+            response.audio_content,
+            mimetype="audio/mpeg",
+            headers={"Cache-Control": "no-store"},
+        )
+    except Exception as e:
+        app.logger.error("Google TTS error: %s", e)
+        return jsonify({"error": f"Google TTS failed: {str(e)[:250]}"}), 502
+
+
 @app.route("/api/voice", methods=["POST"])
 def voice_to_text():
     """
@@ -1047,6 +1133,7 @@ def voice_to_text():
         )
     except MeralionError as e:
         message = str(e)
+        app.logger.error("MERaLiON STT error: %s", message)
         status = 503 if "not configured" in message.lower() else 502
         return jsonify({"error": message}), status
     except Exception as e:
