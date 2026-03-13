@@ -4,6 +4,7 @@
    ========================================================================== */
 
 const API = '';  // Same origin
+const AUTO_DETECT_VALUE = '__auto_detect__';
 
 // ---------------------------------------------------------------------------
 // Speech language mapping (our language code → BCP 47 for Web Speech API)
@@ -66,6 +67,7 @@ let checkinState = {
     isAutoMode: true,     // auto speak→listen→send loop
     isSpeaking: false,
     isListening: false,
+    pendingLanguageDetect: false,
 };
 
 let checkinRec = null;        // active SpeechRecognition for check-in
@@ -188,6 +190,11 @@ function populateCheckinLanguageDropdown() {
     if (!sel) return;
     sel.innerHTML = '';
 
+    const auto = document.createElement('option');
+    auto.value = AUTO_DETECT_VALUE;
+    auto.textContent = 'Auto-detect from first message';
+    sel.appendChild(auto);
+
     // Build optgroups dynamically from the group field returned by the API
     const grouped = {};
     const groupOrder = [];
@@ -213,7 +220,13 @@ function populateCheckinLanguageDropdown() {
 function updateCheckinDialects() {
     const lang = document.getElementById('checkin-language').value;
     const sel = document.getElementById('checkin-dialect');
+    if (!sel) return;
     sel.innerHTML = '<option value="">— Select —</option>';
+    if (lang === AUTO_DETECT_VALUE) {
+        sel.disabled = true;
+        return;
+    }
+    sel.disabled = false;
     const dialects = state.languages[lang]?.dialects || [];
     for (const d of dialects) {
         const opt = document.createElement('option');
@@ -221,6 +234,17 @@ function updateCheckinDialects() {
         opt.textContent = d;
         sel.appendChild(opt);
     }
+}
+
+async function detectLanguageFromText(text) {
+    const res = await fetch(`${API}/api/language/detect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Language detection failed');
+    return data;
 }
 
 // ---------------------------------------------------------------------------
@@ -235,11 +259,13 @@ async function handleCheckinSetup(e) {
     const dialect  = document.getElementById('checkin-dialect').value;
     const cultural = document.getElementById('checkin-cultural').value.trim();
 
+    const autoDetect = language === AUTO_DETECT_VALUE;
     const langData = state.languages[language];
-    checkinState.langCode = langData?.code || 'en';
-    checkinState.langName = language;
-    checkinState.dialect = dialect || '';
+    checkinState.langCode = autoDetect ? 'en' : (langData?.code || 'en');
+    checkinState.langName = autoDetect ? 'Auto-detect' : language;
+    checkinState.dialect = autoDetect ? '' : (dialect || '');
     checkinState.isAutoMode = true;
+    checkinState.pendingLanguageDetect = autoDetect;
 
     showSpinner('Starting your check-in with Aria…');
 
@@ -248,39 +274,51 @@ async function handleCheckinSetup(e) {
         const pRes = await fetch(`${API}/api/patients`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, date_of_birth: dob, preferred_language: language, dialect, cultural_context: cultural }),
+            body: JSON.stringify({
+                name,
+                date_of_birth: dob,
+                preferred_language: autoDetect ? 'English' : language,
+                dialect: autoDetect ? '' : dialect,
+                cultural_context: cultural,
+            }),
         });
         const patient = await pRes.json();
         checkinState.patientId = patient.id;
-
-        // Create pre-consultation session
-        const sRes = await fetch(`${API}/api/sessions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ patient_id: patient.id, session_type: 'pre', language, dialect }),
-        });
-        const session = await sRes.json();
-        checkinState.sessionId = session.session_id;
-
-        if (session.api_key_invalid) {
-            document.getElementById('api-key-banner').classList.remove('hidden');
-        }
 
         // Set up chat UI
         document.getElementById('checkin-messages').innerHTML = '';
         document.getElementById('checkin-input').value = '';
         document.getElementById('checkin-chat-title').textContent = name;
         document.getElementById('checkin-lang-badge').textContent =
-            `${language}${dialect ? ' · ' + dialect : ''}`;
+            autoDetect ? 'Auto-detect' : `${language}${dialect ? ' · ' + dialect : ''}`;
         updateAutoModeUI();
 
         hideSpinner();
         showCheckinStep('checkin-chat');
+        if (autoDetect) {
+            const prompt = 'Tell me your symptoms naturally. I will detect your language and continue.';
+            appendCheckinBubble('assistant', prompt);
+            if (checkinState.isAutoMode) {
+                checkinSpeakThenListen(prompt);
+            }
+        } else {
+            // Create pre-consultation session
+            const sRes = await fetch(`${API}/api/sessions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ patient_id: patient.id, session_type: 'pre', language, dialect }),
+            });
+            const session = await sRes.json();
+            checkinState.sessionId = session.session_id;
 
-        // Greet and start voice loop
-        appendCheckinBubble('assistant', session.greeting);
-        if (checkinState.isAutoMode) {
-            checkinSpeakThenListen(session.greeting);
+            if (session.api_key_invalid) {
+                document.getElementById('api-key-banner').classList.remove('hidden');
+            }
+
+            appendCheckinBubble('assistant', session.greeting);
+            if (checkinState.isAutoMode) {
+                checkinSpeakThenListen(session.greeting);
+            }
         }
     } catch (err) {
         hideSpinner();
@@ -294,6 +332,7 @@ function backToCheckinSetup() {
     stopCheckinVoice();
     checkinState.patientId = null;
     checkinState.sessionId = null;
+    checkinState.pendingLanguageDetect = false;
     showCheckinStep('checkin-setup');
 }
 
@@ -304,7 +343,7 @@ function backToCheckinSetup() {
 async function sendCheckinMessage(textOverride) {
     const input = document.getElementById('checkin-input');
     const text = (textOverride !== undefined ? textOverride : input.value).trim();
-    if (!text || !checkinState.sessionId) return;
+    if (!text) return;
 
     input.value = '';
     input.style.height = 'auto';
@@ -315,6 +354,33 @@ async function sendCheckinMessage(textOverride) {
     document.getElementById('btn-send-to-doctor').disabled = true;
 
     try {
+        if (!checkinState.sessionId && checkinState.pendingLanguageDetect) {
+            const detected = await detectLanguageFromText(text);
+            checkinState.langCode = detected.language_code || 'en';
+            checkinState.langName = detected.language || 'English';
+            checkinState.dialect = detected.dialect || '';
+            checkinState.pendingLanguageDetect = false;
+            document.getElementById('checkin-lang-badge').textContent =
+                `${checkinState.langName}${checkinState.dialect ? ' · ' + checkinState.dialect : ''}`;
+
+            const sRes = await fetch(`${API}/api/sessions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    patient_id: checkinState.patientId,
+                    session_type: 'pre',
+                    language: checkinState.langName,
+                    dialect: checkinState.dialect,
+                }),
+            });
+            const session = await sRes.json();
+            checkinState.sessionId = session.session_id;
+            if (session.api_key_invalid) {
+                document.getElementById('api-key-banner').classList.remove('hidden');
+            }
+        }
+        if (!checkinState.sessionId) throw new Error('Session not initialized');
+
         const res = await fetch(`${API}/api/sessions/${checkinState.sessionId}/message`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -989,6 +1055,7 @@ let agentState = {
     isAutoMode: true,
     isSpeaking: false,
     isListening: false,
+    pendingLanguageDetect: false,
     medications: [],
     appointments: [],
     family: [],
@@ -1010,6 +1077,11 @@ function populateAgentLanguageDropdown() {
     const sel = document.getElementById('agent-language');
     if (!sel) return;
     sel.innerHTML = '';
+
+    const auto = document.createElement('option');
+    auto.value = AUTO_DETECT_VALUE;
+    auto.textContent = 'Auto-detect from first message';
+    sel.appendChild(auto);
     const grouped = {};
     const groupOrder = [];
     for (const [lang, data] of Object.entries(state.languages)) {
@@ -1036,6 +1108,11 @@ function updateAgentDialects() {
     const sel = document.getElementById('agent-dialect');
     if (!sel) return;
     sel.innerHTML = '<option value="">— Select —</option>';
+    if (lang === AUTO_DETECT_VALUE) {
+        sel.disabled = true;
+        return;
+    }
+    sel.disabled = false;
     const dialects = state.languages[lang]?.dialects || [];
     for (const d of dialects) {
         const opt = document.createElement('option');
@@ -1054,12 +1131,14 @@ async function handleAgentSetup(e) {
     const name = document.getElementById('agent-name').value.trim();
     const language = document.getElementById('agent-language').value;
     const dialect = document.getElementById('agent-dialect')?.value || '';
+    const autoDetect = language === AUTO_DETECT_VALUE;
 
     const langData = state.languages[language];
-    agentState.langCode = langData?.code || 'en';
-    agentState.langName = language;
-    agentState.dialect = dialect;
+    agentState.langCode = autoDetect ? 'en' : (langData?.code || 'en');
+    agentState.langName = autoDetect ? 'Auto-detect' : language;
+    agentState.dialect = autoDetect ? '' : dialect;
     agentState.isAutoMode = true;
+    agentState.pendingLanguageDetect = autoDetect;
 
     showSpinner('Starting Aria — My Health Assistant…');
 
@@ -1068,25 +1147,16 @@ async function handleAgentSetup(e) {
         const pRes = await fetch(`${API}/api/patients`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, preferred_language: language }),
+            body: JSON.stringify({ name, preferred_language: autoDetect ? 'English' : language }),
         });
         const patient = await pRes.json();
         agentState.patientId = patient.id;
-
-        // Start agent session
-        const sRes = await fetch(`${API}/api/agent/start`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ patient_id: patient.id, language, patient_name: name }),
-        });
-        const session = await sRes.json();
-        agentState.sessionId = session.session_id;
 
         // Set up UI
         document.getElementById('agent-messages').innerHTML = '';
         document.getElementById('agent-input').value = '';
         document.getElementById('agent-chat-title').textContent = name;
-        document.getElementById('agent-lang-badge').textContent = language;
+        document.getElementById('agent-lang-badge').textContent = autoDetect ? 'Auto-detect' : language;
         document.getElementById('agent-dash-patient-name').textContent = name;
         updateAgentAutoModeUI();
 
@@ -1095,9 +1165,26 @@ async function handleAgentSetup(e) {
 
         requestNotificationPermission();
 
-        appendAgentBubble('assistant', session.greeting);
-        if (agentState.isAutoMode) {
-            agentSpeakThenListen(session.greeting);
+        if (autoDetect) {
+            const prompt = 'Tell me what you need. I will auto-detect your language.';
+            appendAgentBubble('assistant', prompt);
+            if (agentState.isAutoMode) {
+                agentSpeakThenListen(prompt);
+            }
+        } else {
+            // Start agent session
+            const sRes = await fetch(`${API}/api/agent/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ patient_id: patient.id, language, patient_name: name }),
+            });
+            const session = await sRes.json();
+            agentState.sessionId = session.session_id;
+
+            appendAgentBubble('assistant', session.greeting);
+            if (agentState.isAutoMode) {
+                agentSpeakThenListen(session.greeting);
+            }
         }
 
         // Load dashboard data in background
@@ -1114,6 +1201,7 @@ function backToAgentSetup() {
     stopAgentVoice();
     agentState.patientId = null;
     agentState.sessionId = null;
+    agentState.pendingLanguageDetect = false;
     showAgentStep('agent-setup');
 }
 
@@ -1139,7 +1227,7 @@ function backToAgentChat() {
 async function sendAgentMessage(textOverride) {
     const input = document.getElementById('agent-input');
     const text = (textOverride !== undefined ? textOverride : input.value).trim();
-    if (!text || !agentState.sessionId) return;
+    if (!text) return;
 
     input.value = '';
     input.style.height = 'auto';
@@ -1149,6 +1237,29 @@ async function sendAgentMessage(textOverride) {
     document.getElementById('btn-agent-send').disabled = true;
 
     try {
+        if (!agentState.sessionId && agentState.pendingLanguageDetect) {
+            const detected = await detectLanguageFromText(text);
+            agentState.langCode = detected.language_code || 'en';
+            agentState.langName = detected.language || 'English';
+            agentState.dialect = detected.dialect || '';
+            agentState.pendingLanguageDetect = false;
+            document.getElementById('agent-lang-badge').textContent =
+                `${agentState.langName}${agentState.dialect ? ' · ' + agentState.dialect : ''}`;
+
+            const sRes = await fetch(`${API}/api/agent/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    patient_id: agentState.patientId,
+                    language: agentState.langName,
+                    patient_name: document.getElementById('agent-chat-title')?.textContent || '',
+                }),
+            });
+            const session = await sRes.json();
+            agentState.sessionId = session.session_id;
+        }
+        if (!agentState.sessionId) throw new Error('Agent session not initialized');
+
         const res = await fetch(`${API}/api/agent/sessions/${agentState.sessionId}/message`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

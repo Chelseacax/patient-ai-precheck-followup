@@ -12,6 +12,7 @@ Dual-portal design:
 import os
 import json
 import uuid
+import re
 from datetime import datetime, timezone
 
 from flask import Flask, request, jsonify, send_from_directory, Response
@@ -295,6 +296,114 @@ SUPPORTED_LANGUAGES = {
 # All remaining languages (including Cantonese) are supported well enough by
 # SEA-LION for English translation. Keep this frozenset as a safety valve.
 LANGUAGES_SKIP_ENGLISH_TRANSLATION = frozenset()
+
+
+def _detect_language_heuristic(text):
+    """
+    Lightweight language/dialect detector for first-utterance routing.
+    Returns (language, dialect, confidence, reason).
+    """
+    raw = (text or "").strip()
+    lower = raw.lower()
+    if not raw:
+        return "English", "Standard Singapore English", 0.35, "empty input fallback"
+
+    # Script-based detection first
+    if re.search(r"[\u0B80-\u0BFF]", raw):
+        return "Tamil (தமிழ்)", "Singapore Tamil (சிங்கப்பூர் தமிழ்)", 0.95, "Tamil script detected"
+    if re.search(r"[\u0900-\u097F]", raw):
+        return "Hindi (हिन्दी)", "Colloquial Hindi", 0.9, "Devanagari script detected"
+    if re.search(r"[\u1000-\u109F]", raw):
+        return "Burmese (မြန်မာဘာသာ)", "Colloquial Burmese", 0.9, "Burmese script detected"
+    if re.search(r"[\u0980-\u09FF]", raw):
+        return "Bengali (বাংলা)", "Standard Bengali", 0.9, "Bengali script detected"
+    if re.search(r"[\u1780-\u17FF]", raw):
+        return "Khmer (ភាសាខ្មែរ)", "Standard Khmer", 0.9, "Khmer script detected"
+    if re.search(r"[\u0E00-\u0E7F]", raw):
+        return "Thai (ภาษาไทย)", "Informal Thai", 0.9, "Thai script detected"
+
+    # Chinese script, with rough Cantonese hints
+    if re.search(r"[\u4E00-\u9FFF]", raw):
+        cantonese_markers = ("佢", "冇", "咩", "嘅", "喺", "哋", "咗")
+        if any(marker in raw for marker in cantonese_markers):
+            return "广东话 (Cantonese)", "新加坡广东话 (Singapore Cantonese)", 0.86, "Chinese script with Cantonese markers"
+        return "华语 (Mandarin)", "新加坡华语 (Singapore Mandarin)", 0.82, "Chinese script detected"
+
+    # Latin-script lexical hints
+    malay_markers = (
+        "saya", "awak", "anda", "tak", "tidak", "sakit", "kepala",
+        "perut", "demam", "batuk", "doktor", "klinik", "lah",
+    )
+    singlish_markers = (
+        "lah", "leh", "lor", "meh", "sia", "sian", "can or not",
+        "alamak", "auntie", "uncle", "shiok",
+    )
+    hokkien_markers = ("aiya", "bo pian", "paiseh", "kancheong")
+
+    malay_score = sum(1 for marker in malay_markers if marker in lower)
+    singlish_score = sum(1 for marker in singlish_markers if marker in lower)
+    hokkien_score = sum(1 for marker in hokkien_markers if marker in lower)
+
+    if hokkien_score >= 2:
+        return "福建话 (Hokkien)", "Singapore Hokkien", 0.66, "Hokkien lexical markers"
+    if malay_score >= 2 and malay_score >= singlish_score:
+        return "Malay (Bahasa Melayu)", "Informal / Colloquial Malay", 0.78, "Malay lexical markers"
+    if singlish_score >= 1:
+        return "English", "Singlish", 0.74, "Singlish particles/markers"
+
+    return "English", "Standard Singapore English", 0.52, "default English fallback"
+
+
+def _detect_language_with_llm(text):
+    """
+    LLM-assisted detector for mixed-code utterances.
+    Returns dict or None on failure.
+    """
+    prompt = (
+        "Detect the dominant spoken language and dialect for this Singapore healthcare utterance. "
+        "Pick ONLY from these language keys and dialect values:\n"
+        f"{json.dumps(SUPPORTED_LANGUAGES, ensure_ascii=False)}\n\n"
+        "Return JSON only:\n"
+        "{\"language\":\"...\",\"dialect\":\"...\",\"confidence\":0.0,\"is_mixed\":true,\"reason\":\"...\"}\n"
+        "If mixed language, pick the dominant language the assistant should respond in."
+    )
+    try:
+        raw, _ = call_llm(
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": text},
+            ],
+            max_tokens=220,
+            temperature=0.0,
+        )
+        if not raw:
+            return None
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start < 0 or end <= start:
+            return None
+        parsed = json.loads(raw[start:end], strict=False)
+        language = parsed.get("language")
+        dialect = parsed.get("dialect", "")
+        if language not in SUPPORTED_LANGUAGES:
+            return None
+        if dialect and dialect not in SUPPORTED_LANGUAGES[language].get("dialects", []):
+            dialect = SUPPORTED_LANGUAGES[language].get("dialects", [""])[0]
+        confidence = parsed.get("confidence", 0.0)
+        try:
+            confidence = float(confidence)
+        except Exception:
+            confidence = 0.0
+        confidence = max(0.0, min(1.0, confidence))
+        return {
+            "language": language,
+            "dialect": dialect,
+            "confidence": confidence,
+            "reason": parsed.get("reason", "llm classification"),
+            "is_mixed": bool(parsed.get("is_mixed", False)),
+        }
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -1024,6 +1133,46 @@ def _build_agent_system_prompt(language, patient_name):
 @app.route("/api/languages", methods=["GET"])
 def get_languages():
     return jsonify(SUPPORTED_LANGUAGES)
+
+
+@app.route("/api/language/detect", methods=["POST"])
+def detect_language():
+    """
+    Detect dominant language/dialect from first utterance.
+    """
+    data = request.get_json() or {}
+    text = (data.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": "text is required"}), 400
+
+    h_lang, h_dialect, h_conf, h_reason = _detect_language_heuristic(text)
+    detected = {
+        "language": h_lang,
+        "dialect": h_dialect,
+        "confidence": h_conf,
+        "reason": h_reason,
+        "is_mixed": False,
+        "engine": "heuristic",
+    }
+
+    llm_detected = _detect_language_with_llm(text)
+    if llm_detected and llm_detected.get("confidence", 0) >= max(0.60, h_conf - 0.05):
+        detected = {
+            **llm_detected,
+            "engine": "llm",
+        }
+
+    language = detected["language"]
+    language_code = SUPPORTED_LANGUAGES.get(language, {}).get("code", "en")
+    return jsonify({
+        "language": language,
+        "dialect": detected.get("dialect", ""),
+        "language_code": language_code,
+        "confidence": detected.get("confidence", 0.0),
+        "is_mixed": bool(detected.get("is_mixed", False)),
+        "reason": detected.get("reason", ""),
+        "engine": detected.get("engine", "heuristic"),
+    })
 
 
 @app.route("/api/voice/health", methods=["GET"])
