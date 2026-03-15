@@ -91,7 +91,7 @@ function navigateTo(view) {
 
     if (view === 'doctor') loadSessions();
     if (view === 'checkin') showCheckinStep('checkin-setup');
-    if (view === 'agent') showAgentStep('agent-setup');
+    if (view === 'agent') { showAgentStep('agent-setup'); _hhConnectWS(); }
 
     stopCheckinSpeaking();
     stopCheckinVoice();
@@ -1209,6 +1209,41 @@ function showAgentStep(stepId) {
     document.querySelectorAll('.agent-step').forEach(s => s.classList.remove('active'));
     const el = document.getElementById(stepId);
     if (el) el.classList.add('active');
+}
+
+// ── HealthHub Live Bridge (WebSocket to port 7001) ────────────────────────────
+let _hhWs = null;
+let _hhRetry = null;
+
+function _hhConnectWS() {
+    if (_hhWs && (_hhWs.readyState === WebSocket.CONNECTING || _hhWs.readyState === WebSocket.OPEN)) return;
+    try { _hhWs = new WebSocket('ws://localhost:7001/ws'); } catch (e) { return; }
+
+    _hhWs.onopen = () => {
+        const dot = document.getElementById('hh-live-dot');
+        if (dot) dot.classList.add('online');
+    };
+    _hhWs.onclose = () => {
+        const dot = document.getElementById('hh-live-dot');
+        if (dot) dot.classList.remove('online');
+        if (_hhRetry) clearTimeout(_hhRetry);
+        _hhRetry = setTimeout(() => {
+            if (document.getElementById('view-agent')?.classList.contains('active')) _hhConnectWS();
+        }, 3000);
+    };
+    _hhWs.onerror = () => {};
+    _hhWs.onmessage = (ev) => {
+        try {
+            const msg = JSON.parse(ev.data);
+            if (msg.type !== 'screenshot') return;
+            const img = document.getElementById('hh-live-img');
+            const ph  = document.getElementById('hh-live-placeholder');
+            if (img) { img.src = 'data:image/jpeg;base64,' + msg.data; img.style.display = 'block'; }
+            if (ph)  ph.style.display = 'none';
+            const urlEl = document.getElementById('hh-live-url');
+            if (urlEl && msg.url) urlEl.textContent = msg.url.replace('http://localhost:5173', '');
+        } catch (e) {}
+    };
 }
 
 function showAgentDashboard() {

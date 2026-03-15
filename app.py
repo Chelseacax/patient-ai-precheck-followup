@@ -415,85 +415,143 @@ MOCK_DOCTORS = [
         "id": "dr_lim",
         "name": "Dr. Lim Wei Jie",
         "specialty": "General Practice",
+        "institution": "Clementi Polyclinic",
         "slots": [
-            {"slot_id": "dr_lim_01", "datetime": "2026-03-05 09:00"},
-            {"slot_id": "dr_lim_02", "datetime": "2026-03-05 10:00"},
-            {"slot_id": "dr_lim_03", "datetime": "2026-03-05 11:00"},
-            {"slot_id": "dr_lim_04", "datetime": "2026-03-05 14:00"},
-            {"slot_id": "dr_lim_05", "datetime": "2026-03-06 09:00"},
-            {"slot_id": "dr_lim_06", "datetime": "2026-03-06 10:00"},
-            {"slot_id": "dr_lim_07", "datetime": "2026-03-06 14:00"},
-            {"slot_id": "dr_lim_08", "datetime": "2026-03-07 09:00"},
-            {"slot_id": "dr_lim_09", "datetime": "2026-03-07 15:00"},
-            {"slot_id": "dr_lim_10", "datetime": "2026-03-10 10:00"},
+            {"slot_id": "dr_lim_01", "datetime": "2026-03-16 09:00"},
+            {"slot_id": "dr_lim_02", "datetime": "2026-03-16 11:00"},
+            {"slot_id": "dr_lim_03", "datetime": "2026-03-17 09:00"},
+            {"slot_id": "dr_lim_04", "datetime": "2026-03-17 14:00"},
+            {"slot_id": "dr_lim_05", "datetime": "2026-03-18 10:00"},
+            {"slot_id": "dr_lim_06", "datetime": "2026-03-18 15:00"},
+            {"slot_id": "dr_lim_07", "datetime": "2026-03-19 09:00"},
+            {"slot_id": "dr_lim_08", "datetime": "2026-03-19 11:00"},
+            {"slot_id": "dr_lim_09", "datetime": "2026-03-20 10:00"},
+            {"slot_id": "dr_lim_10", "datetime": "2026-03-20 14:00"},
+            {"slot_id": "dr_lim_11", "datetime": "2026-03-23 09:00"},
+            {"slot_id": "dr_lim_12", "datetime": "2026-03-23 11:00"},
+            {"slot_id": "dr_lim_13", "datetime": "2026-03-24 09:00"},
+            {"slot_id": "dr_lim_14", "datetime": "2026-03-24 14:00"},
+            {"slot_id": "dr_lim_15", "datetime": "2026-03-25 10:00"},
+            {"slot_id": "dr_lim_16", "datetime": "2026-03-26 09:00"},
+            {"slot_id": "dr_lim_17", "datetime": "2026-03-27 10:00"},
+            {"slot_id": "dr_lim_18", "datetime": "2026-03-30 09:00"},
+            {"slot_id": "dr_lim_19", "datetime": "2026-04-01 10:00"},
+            {"slot_id": "dr_lim_20", "datetime": "2026-04-03 14:00"},
+        ],
+    },
+    {
+        "id": "dr_tan",
+        "name": "Dr. Tan Mei Ling",
+        "specialty": "General Practice",
+        "institution": "Bukit Batok Polyclinic",
+        "slots": [
+            {"slot_id": "dr_tan_01", "datetime": "2026-03-16 10:00"},
+            {"slot_id": "dr_tan_02", "datetime": "2026-03-16 14:00"},
+            {"slot_id": "dr_tan_03", "datetime": "2026-03-17 10:00"},
+            {"slot_id": "dr_tan_04", "datetime": "2026-03-17 15:00"},
+            {"slot_id": "dr_tan_05", "datetime": "2026-03-18 09:00"},
+            {"slot_id": "dr_tan_06", "datetime": "2026-03-19 14:00"},
+            {"slot_id": "dr_tan_07", "datetime": "2026-03-20 09:00"},
+            {"slot_id": "dr_tan_08", "datetime": "2026-03-23 10:00"},
+            {"slot_id": "dr_tan_09", "datetime": "2026-03-24 10:00"},
+            {"slot_id": "dr_tan_10", "datetime": "2026-03-25 14:00"},
+            {"slot_id": "dr_tan_11", "datetime": "2026-03-26 10:00"},
+            {"slot_id": "dr_tan_12", "datetime": "2026-03-27 09:00"},
+            {"slot_id": "dr_tan_13", "datetime": "2026-03-30 14:00"},
+            {"slot_id": "dr_tan_14", "datetime": "2026-04-01 09:00"},
+            {"slot_id": "dr_tan_15", "datetime": "2026-04-06 10:00"},
         ],
     },
     {
         "id": "dr_siti",
         "name": "Dr. Siti Rahimah",
         "specialty": "Cardiology",
+        "institution": "Singapore General Hospital",
         "slots": [
-            {"slot_id": "dr_siti_01", "datetime": "2026-03-05 10:00"},
-            {"slot_id": "dr_siti_02", "datetime": "2026-03-05 14:00"},
-            {"slot_id": "dr_siti_03", "datetime": "2026-03-06 10:00"},
-            {"slot_id": "dr_siti_04", "datetime": "2026-03-06 14:00"},
-            {"slot_id": "dr_siti_05", "datetime": "2026-03-07 10:00"},
-            {"slot_id": "dr_siti_06", "datetime": "2026-03-09 10:00"},
-            {"slot_id": "dr_siti_07", "datetime": "2026-03-10 10:00"},
-            {"slot_id": "dr_siti_08", "datetime": "2026-03-10 14:00"},
-            {"slot_id": "dr_siti_09", "datetime": "2026-03-11 10:00"},
-            {"slot_id": "dr_siti_10", "datetime": "2026-03-11 14:00"},
+            {"slot_id": "dr_siti_01", "datetime": "2026-03-16 10:00"},
+            {"slot_id": "dr_siti_02", "datetime": "2026-03-16 14:00"},
+            {"slot_id": "dr_siti_03", "datetime": "2026-03-17 10:00"},
+            {"slot_id": "dr_siti_04", "datetime": "2026-03-18 14:00"},
+            {"slot_id": "dr_siti_05", "datetime": "2026-03-19 10:00"},
+            {"slot_id": "dr_siti_06", "datetime": "2026-03-20 10:00"},
+            {"slot_id": "dr_siti_07", "datetime": "2026-03-23 14:00"},
+            {"slot_id": "dr_siti_08", "datetime": "2026-03-24 10:00"},
+            {"slot_id": "dr_siti_09", "datetime": "2026-03-25 14:00"},
+            {"slot_id": "dr_siti_10", "datetime": "2026-03-26 10:00"},
+            {"slot_id": "dr_siti_11", "datetime": "2026-03-27 14:00"},
+            {"slot_id": "dr_siti_12", "datetime": "2026-03-30 10:00"},
+            {"slot_id": "dr_siti_13", "datetime": "2026-04-01 14:00"},
+            {"slot_id": "dr_siti_14", "datetime": "2026-04-06 10:00"},
+            {"slot_id": "dr_siti_15", "datetime": "2026-04-08 14:00"},
         ],
     },
     {
         "id": "dr_rajan",
         "name": "Dr. Rajan Pillai",
         "specialty": "Dermatology",
+        "institution": "National Skin Centre",
         "slots": [
-            {"slot_id": "dr_rajan_01", "datetime": "2026-03-05 09:00"},
-            {"slot_id": "dr_rajan_02", "datetime": "2026-03-05 11:00"},
-            {"slot_id": "dr_rajan_03", "datetime": "2026-03-05 15:00"},
-            {"slot_id": "dr_rajan_04", "datetime": "2026-03-06 09:00"},
-            {"slot_id": "dr_rajan_05", "datetime": "2026-03-06 11:00"},
-            {"slot_id": "dr_rajan_06", "datetime": "2026-03-08 10:00"},
-            {"slot_id": "dr_rajan_07", "datetime": "2026-03-08 14:00"},
-            {"slot_id": "dr_rajan_08", "datetime": "2026-03-10 09:00"},
-            {"slot_id": "dr_rajan_09", "datetime": "2026-03-10 11:00"},
-            {"slot_id": "dr_rajan_10", "datetime": "2026-03-10 15:00"},
+            {"slot_id": "dr_rajan_01", "datetime": "2026-03-16 09:00"},
+            {"slot_id": "dr_rajan_02", "datetime": "2026-03-16 15:00"},
+            {"slot_id": "dr_rajan_03", "datetime": "2026-03-17 11:00"},
+            {"slot_id": "dr_rajan_04", "datetime": "2026-03-18 09:00"},
+            {"slot_id": "dr_rajan_05", "datetime": "2026-03-19 15:00"},
+            {"slot_id": "dr_rajan_06", "datetime": "2026-03-20 11:00"},
+            {"slot_id": "dr_rajan_07", "datetime": "2026-03-23 09:00"},
+            {"slot_id": "dr_rajan_08", "datetime": "2026-03-24 15:00"},
+            {"slot_id": "dr_rajan_09", "datetime": "2026-03-25 11:00"},
+            {"slot_id": "dr_rajan_10", "datetime": "2026-03-26 09:00"},
+            {"slot_id": "dr_rajan_11", "datetime": "2026-03-27 15:00"},
+            {"slot_id": "dr_rajan_12", "datetime": "2026-03-30 11:00"},
+            {"slot_id": "dr_rajan_13", "datetime": "2026-04-01 09:00"},
+            {"slot_id": "dr_rajan_14", "datetime": "2026-04-06 15:00"},
+            {"slot_id": "dr_rajan_15", "datetime": "2026-04-08 11:00"},
         ],
     },
     {
         "id": "dr_chen",
         "name": "Dr. Chen Xiu Ying",
         "specialty": "Paediatrics",
+        "institution": "Khoo Teck Puat Hospital",
         "slots": [
-            {"slot_id": "dr_chen_01", "datetime": "2026-03-05 09:00"},
-            {"slot_id": "dr_chen_02", "datetime": "2026-03-05 10:00"},
-            {"slot_id": "dr_chen_03", "datetime": "2026-03-05 14:00"},
-            {"slot_id": "dr_chen_04", "datetime": "2026-03-05 15:00"},
-            {"slot_id": "dr_chen_05", "datetime": "2026-03-06 09:00"},
-            {"slot_id": "dr_chen_06", "datetime": "2026-03-06 14:00"},
-            {"slot_id": "dr_chen_07", "datetime": "2026-03-09 09:00"},
-            {"slot_id": "dr_chen_08", "datetime": "2026-03-09 10:00"},
-            {"slot_id": "dr_chen_09", "datetime": "2026-03-09 14:00"},
-            {"slot_id": "dr_chen_10", "datetime": "2026-03-09 15:00"},
+            {"slot_id": "dr_chen_01", "datetime": "2026-03-16 09:00"},
+            {"slot_id": "dr_chen_02", "datetime": "2026-03-16 14:00"},
+            {"slot_id": "dr_chen_03", "datetime": "2026-03-17 09:00"},
+            {"slot_id": "dr_chen_04", "datetime": "2026-03-17 15:00"},
+            {"slot_id": "dr_chen_05", "datetime": "2026-03-18 10:00"},
+            {"slot_id": "dr_chen_06", "datetime": "2026-03-19 09:00"},
+            {"slot_id": "dr_chen_07", "datetime": "2026-03-19 14:00"},
+            {"slot_id": "dr_chen_08", "datetime": "2026-03-20 09:00"},
+            {"slot_id": "dr_chen_09", "datetime": "2026-03-23 10:00"},
+            {"slot_id": "dr_chen_10", "datetime": "2026-03-24 14:00"},
+            {"slot_id": "dr_chen_11", "datetime": "2026-03-25 09:00"},
+            {"slot_id": "dr_chen_12", "datetime": "2026-03-26 14:00"},
+            {"slot_id": "dr_chen_13", "datetime": "2026-03-27 10:00"},
+            {"slot_id": "dr_chen_14", "datetime": "2026-03-30 09:00"},
+            {"slot_id": "dr_chen_15", "datetime": "2026-04-01 14:00"},
         ],
     },
     {
         "id": "dr_farhan",
         "name": "Dr. Muhammad Farhan",
         "specialty": "Orthopaedics",
+        "institution": "Tan Tock Seng Hospital",
         "slots": [
-            {"slot_id": "dr_farhan_01", "datetime": "2026-03-06 14:00"},
-            {"slot_id": "dr_farhan_02", "datetime": "2026-03-06 15:00"},
-            {"slot_id": "dr_farhan_03", "datetime": "2026-03-07 09:00"},
-            {"slot_id": "dr_farhan_04", "datetime": "2026-03-07 10:00"},
-            {"slot_id": "dr_farhan_05", "datetime": "2026-03-07 15:00"},
-            {"slot_id": "dr_farhan_06", "datetime": "2026-03-09 14:00"},
-            {"slot_id": "dr_farhan_07", "datetime": "2026-03-09 15:00"},
-            {"slot_id": "dr_farhan_08", "datetime": "2026-03-10 09:00"},
-            {"slot_id": "dr_farhan_09", "datetime": "2026-03-10 10:00"},
-            {"slot_id": "dr_farhan_10", "datetime": "2026-03-10 14:00"},
+            {"slot_id": "dr_farhan_01", "datetime": "2026-03-16 14:00"},
+            {"slot_id": "dr_farhan_02", "datetime": "2026-03-17 10:00"},
+            {"slot_id": "dr_farhan_03", "datetime": "2026-03-18 09:00"},
+            {"slot_id": "dr_farhan_04", "datetime": "2026-03-18 15:00"},
+            {"slot_id": "dr_farhan_05", "datetime": "2026-03-19 10:00"},
+            {"slot_id": "dr_farhan_06", "datetime": "2026-03-20 14:00"},
+            {"slot_id": "dr_farhan_07", "datetime": "2026-03-23 09:00"},
+            {"slot_id": "dr_farhan_08", "datetime": "2026-03-24 10:00"},
+            {"slot_id": "dr_farhan_09", "datetime": "2026-03-25 14:00"},
+            {"slot_id": "dr_farhan_10", "datetime": "2026-03-26 10:00"},
+            {"slot_id": "dr_farhan_11", "datetime": "2026-03-27 09:00"},
+            {"slot_id": "dr_farhan_12", "datetime": "2026-03-30 14:00"},
+            {"slot_id": "dr_farhan_13", "datetime": "2026-04-01 10:00"},
+            {"slot_id": "dr_farhan_14", "datetime": "2026-04-06 09:00"},
+            {"slot_id": "dr_farhan_15", "datetime": "2026-04-08 14:00"},
         ],
     },
 ]
@@ -664,11 +722,17 @@ def tool_get_doctor_slots(doctor_id, date=None):
         return {"error": f"Doctor '{doctor_id}' not found"}
     booked = {a.slot_datetime for a in Appointment.query.filter_by(
         doctor_id=doctor_id, status="scheduled").all()}
-    slots = doctor["slots"]
+    today = datetime.now().strftime("%Y-%m-%d")
+    slots = [s for s in doctor["slots"] if s["datetime"] >= today]  # only future slots
     if date:
         slots = [s for s in slots if s["datetime"].startswith(date)]
     available = [s for s in slots if s["datetime"] not in booked]
-    return {"doctor_name": doctor["name"], "specialty": doctor["specialty"], "available_slots": available}
+    return {
+        "doctor_name": doctor["name"],
+        "specialty": doctor["specialty"],
+        "institution": doctor.get("institution", ""),
+        "available_slots": available,
+    }
 
 
 def tool_book_appointment(patient_id, doctor_id, slot_datetime, reason, family_member_id=None):
@@ -939,6 +1003,73 @@ AGENT_TOOLS = [
             "required": [],
         },
     }},
+    # ── HealthHub Browser Tools ──────────────────────────────────────────────
+    {"type": "function", "function": {
+        "name": "book_on_healthhub",
+        "description": (
+            "Automate the ENTIRE HealthHub booking form — clicks every step "
+            "(hospital, department, date, time, reason, confirm) automatically "
+            "while the patient watches in the live panel. "
+            "Call this only once you have collected ALL 5 booking details from the patient."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "institution": {
+                    "type": "string",
+                    "description": (
+                        "Hospital or polyclinic name. Must be one of: "
+                        "Singapore General Hospital, National University Hospital, "
+                        "Khoo Teck Puat Hospital, Tan Tock Seng Hospital, "
+                        "Clementi Polyclinic, Buona Vista Polyclinic, Jurong Polyclinic"
+                    ),
+                },
+                "specialty": {
+                    "type": "string",
+                    "description": (
+                        "Department. Must be one of: "
+                        "Cardiology, Eye Clinic, General Practice, Neurology, "
+                        "Dental, Orthopaedics, Paediatrics, Vaccination"
+                    ),
+                },
+                "date": {
+                    "type": "string",
+                    "description": "Appointment date in YYYY-MM-DD format, e.g. '2026-03-20'",
+                },
+                "time": {
+                    "type": "string",
+                    "description": "Appointment time, e.g. '09:00' or '14:00' or '9:00 AM'",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": (
+                        "Visit reason. Must be one of: "
+                        "Follow-up consultation, Acute pain or discomfort, "
+                        "Routine check-up, Prescription renewal, Flu jab / Vaccination, "
+                        "Pre-surgery assessment, Specialist referral, Lab test results review"
+                    ),
+                },
+            },
+            "required": ["institution", "specialty", "date", "time", "reason"],
+        },
+    }},
+    {"type": "function", "function": {
+        "name": "view_healthhub",
+        "description": (
+            "Navigate the HealthHub browser to show the patient their appointments, "
+            "medications, or lab reports on the live panel."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "page": {
+                    "type": "string",
+                    "description": "Page to open: appointments | medications | lab-reports | home",
+                },
+            },
+            "required": ["page"],
+        },
+    }},
 ]
 
 # Tool names list for fallback prompt injection
@@ -990,6 +1121,25 @@ def _extract_json_tool_call(text):
         return None
 
 
+HEALTHHUB_BRIDGE_BASE = "http://localhost:7001"
+
+import requests as _bridge_requests
+
+
+def _call_bridge(path, payload=None, method="POST", timeout=45):
+    """Synchronous call to the Playwright bridge. Returns JSON dict or error dict."""
+    try:
+        url = f"{HEALTHHUB_BRIDGE_BASE}{path}"
+        if method == "POST":
+            resp = _bridge_requests.post(url, json=payload or {}, timeout=timeout)
+        else:
+            resp = _bridge_requests.get(url, timeout=timeout)
+        return resp.json()
+    except Exception as e:
+        app.logger.warning("Bridge call %s failed: %s", path, e)
+        return {"error": f"HealthHub browser not reachable: {e}"}
+
+
 def dispatch_tool(name, args, patient_id):
     """Route tool name to its implementation, injecting patient_id for auth."""
     if isinstance(args, str):
@@ -998,6 +1148,20 @@ def dispatch_tool(name, args, patient_id):
         except Exception:
             args = {}
 
+    # ── HealthHub browser tools (call bridge directly, no DB) ──────────────
+    if name == "book_on_healthhub":
+        return _call_bridge("/api/booking/full", {
+            "institution": args.get("institution", ""),
+            "specialty":   args.get("specialty", ""),
+            "date":        args.get("date", ""),
+            "time":        args.get("time", ""),
+            "reason":      args.get("reason", ""),
+        }, timeout=90)
+
+    if name == "view_healthhub":
+        return _call_bridge("/api/navigate", {"page": args.get("page", "home")})
+
+    # ── DB tools ──────────────────────────────────────────────────────────
     dispatch_map = {
         "get_family_members": lambda: tool_get_family_members(patient_id),
         "add_family_member": lambda: tool_add_family_member(
@@ -1029,21 +1193,30 @@ def dispatch_tool(name, args, patient_id):
     if fn is None:
         return {"error": f"Unknown tool: {name}"}
     try:
-        return fn()
+        result = fn()
     except Exception as e:
         app.logger.error("Tool %s error: %s", name, e)
         return {"error": str(e)}
+    return result
 
 
-def run_agent(messages, patient_id, max_iter=5):
+_PLACEHOLDER_PATTERNS = re.compile(
+    r"\bone moment\b|\blet me check\b|\blet me look\b|\bli'll check\b|"
+    r"\bplease wait\b|\bfetching\b|\blooking up\b|\bchecking\b|\bstandby\b",
+    re.IGNORECASE
+)
+
+
+def run_agent(messages, patient_id, max_iter=6):
     """
     Agentic loop: LLM → tool_calls → execute → results → LLM (repeat).
     Returns final text response.
     """
     msgs = list(messages)
     last_text = ""
+    tool_called_this_run = False
 
-    for _ in range(max_iter):
+    for iteration in range(max_iter):
         resp = call_llm_with_tools(msgs, AGENT_TOOLS, max_tokens=600)
         if resp is None:
             return last_text or "[AI service unavailable. Please check your API key.]"
@@ -1053,6 +1226,7 @@ def run_agent(messages, patient_id, max_iter=5):
 
         # Primary path: native tool_calls
         if msg.tool_calls:
+            tool_called_this_run = True
             msgs.append({"role": "assistant", "content": msg.content or "",
                          "tool_calls": [tc.model_dump() for tc in msg.tool_calls]})
             for tc in msg.tool_calls:
@@ -1071,16 +1245,22 @@ def run_agent(messages, patient_id, max_iter=5):
         # Fallback path: parse <tool_call> from content
         parsed = _extract_json_tool_call(text)
         if parsed:
+            tool_called_this_run = True
             tool_name = parsed.get("tool") or parsed.get("name") or parsed.get("function", "")
             tool_args = parsed.get("params") or parsed.get("arguments") or parsed.get("args") or {}
             result = dispatch_tool(tool_name, tool_args, patient_id)
             result_str = json.dumps(result, ensure_ascii=False)
-            # Strip the tool_call block from visible text
-            import re
             clean_text = re.sub(r"<tool_call>.*?</tool_call>", "", text, flags=re.DOTALL).strip()
             if clean_text:
                 msgs.append({"role": "assistant", "content": clean_text})
             msgs.append({"role": "user", "content": f"Tool result for {tool_name}: {result_str}"})
+            continue
+
+        # Detect placeholder responses: model said "one moment / let me check" but called no tool
+        if not tool_called_this_run and _PLACEHOLDER_PATTERNS.search(text):
+            msgs.append({"role": "assistant", "content": text})
+            msgs.append({"role": "user", "content":
+                "Please call the appropriate tool now to get the actual information."})
             continue
 
         # No tool calls — return final response
@@ -1093,37 +1273,56 @@ def run_agent(messages, patient_id, max_iter=5):
 # Agent System Prompt
 # ---------------------------------------------------------------------------
 
-AGENT_SYSTEM_PROMPT_TEMPLATE = """You are Aria, a warm and caring AI health assistant at MedBridge Clinic, Singapore.
-You help patients manage their appointments, medications, and health records via voice conversation.
+AGENT_SYSTEM_PROMPT_TEMPLATE = """You are Aria, a warm and caring AI health assistant at MedBridge, Singapore.
+The patient has a live HealthHub browser panel visible on their screen — you control it.
+Today is {today}. Patient: {patient_name}. Respond entirely in {language}.
 
-You have access to tools that you can call to help the patient. Use them whenever needed.
-After calling a tool, speak only the result to the patient — never expose raw JSON or technical details.
+CRITICAL RULES:
+- Call tools IMMEDIATELY — never say "One moment" or any placeholder before calling.
+- After a tool returns, read the result naturally. Never expose JSON or technical details.
+- Be warm, concise, and conversational. This is a voice interaction.
 
-Voice conversation rules:
-- Keep every response to 1-2 short sentences. This is a voice conversation.
-- Never use markdown, bullet points, or numbered lists.
-- Ask only one question per turn.
-- Be warm, natural, and conversational.
+== BOOKING AN APPOINTMENT ON HEALTHHUB ==
+Ask ONE question at a time, in this fixed order. Wait for the patient's answer before asking the next.
 
-Your capabilities:
-- Book appointments with doctors for the patient or their family members
-- View, manage and cancel existing appointments
-- Add medications with dosage, frequency, and reminder times
-- View active medications
-- Add family members (dependants) to the account
-- Show a health summary with appointments, medications, and past consultations
+Step 1 — Ask: "Which hospital or polyclinic would you like?"
+  Options: Singapore General Hospital, National University Hospital, Khoo Teck Puat Hospital,
+  Tan Tock Seng Hospital, Clementi Polyclinic, Buona Vista Polyclinic, Jurong Polyclinic
 
-Booking flow: first call get_doctors (optionally filtered by specialty), then get_doctor_slots for the chosen doctor, then confirm the slot with the patient before calling book_appointment.
-Medication flow: confirm name, dosage, frequency, and reminder times before calling add_medication.
-Family booking: ask who it is for, add them with add_family_member if not yet registered, then book.
+Step 2 — Ask: "Which department do you need?"
+  Options: Cardiology, Eye Clinic, General Practice, Neurology, Dental, Orthopaedics, Paediatrics, Vaccination
 
-Language: respond entirely in {language}. Today's date is {today}."""
+Step 3 — Ask: "What date would you like? (any day in March or April 2026)"
+
+Step 4 — Ask: "What time works for you?"
+
+Step 5 — Ask: "What is the reason for your visit?"
+  Options: Follow-up consultation, Acute pain or discomfort, Routine check-up, Prescription renewal,
+  Flu jab / Vaccination, Pre-surgery assessment, Specialist referral, Lab test results review
+
+Once you have all 5 answers, say: "Got it! Let me book that for you now on HealthHub."
+Then call book_on_healthhub with all the details — the browser will fill the ENTIRE form at once.
+Do NOT call book_on_healthhub until you have all 5 answers.
+
+After booking succeeds: "Your appointment at [institution] for [specialty] on [date] at [time] is booked!"
+
+== VIEWING ON HEALTHHUB ==
+- Patient wants to see appointments → call view_healthhub(page="appointments")
+- Patient wants to see medications  → call view_healthhub(page="medications")
+- Patient wants to see lab results  → call view_healthhub(page="lab-reports")
+
+== OTHER TOOLS ==
+- get_appointments / cancel_appointment — appointment records
+- get_medications / add_medication / remove_medication — medication management
+- get_family_members / add_family_member — family members
+- get_health_summary — full health overview"""
 
 
 def _build_agent_system_prompt(language, patient_name):
     today = datetime.now().strftime("%Y-%m-%d")
-    base = AGENT_SYSTEM_PROMPT_TEMPLATE.format(language=language, today=today)
-    return f"Patient name: {patient_name}.\n\n{base}"
+    return AGENT_SYSTEM_PROMPT_TEMPLATE.format(
+        language=language, today=today, patient_name=patient_name
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1822,6 +2021,15 @@ def agent_start():
     greeting_msg = AgentMessage(session_id=agent_session.id, role="assistant", content=greeting)
     db.session.add(greeting_msg)
     db.session.commit()
+
+    # Auto-navigate HealthHub to home page (non-blocking)
+    import threading
+    def _open_hh():
+        try:
+            _call_bridge("/api/navigate", {"page": "home"})
+        except Exception:
+            pass
+    threading.Thread(target=_open_hh, daemon=True).start()
 
     return jsonify({"session_id": agent_session.id, "greeting": greeting}), 201
 

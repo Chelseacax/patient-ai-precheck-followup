@@ -247,6 +247,9 @@
 <!-- ===== VIEW: My Health (Agentic AI) ===== -->
 <section id="view-agent" class="view">
     <div class="portal-label agent-label">My Health</div>
+    <div class="agent-view-split">
+    <!-- Left: all agent steps -->
+    <div class="agent-view-left">
 
     <!-- Step 1: Setup -->
     <div id="agent-setup" class="agent-step active">
@@ -287,7 +290,7 @@
         </div>
     </div>
 
-    <!-- Step 2: Chat with Dashboard Strip -->
+    <!-- Step 2: Chat with HealthHub Live View -->
     <div id="agent-chat" class="agent-step">
         <div class="chat-container">
             <div class="chat-header">
@@ -347,8 +350,8 @@
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                 </button>
             </div>
-        </div>
-    </div>
+        </div><!-- .chat-container -->
+    </div><!-- #agent-chat -->
 
     <!-- Step 3: Full Dashboard -->
     <div id="agent-dashboard" class="agent-step">
@@ -388,6 +391,27 @@
             </div>
         </div>
     </div>
+
+    </div><!-- .agent-view-left -->
+
+    <!-- Right: HealthHub Live — always visible in My Health -->
+    <div class="hh-live-panel">
+        <div class="hh-live-header">
+            <span class="hh-live-dot" id="hh-live-dot"></span>
+            <span class="hh-live-title">HealthHub Live</span>
+            <span class="hh-live-url" id="hh-live-url"></span>
+        </div>
+        <div class="hh-live-screen">
+            <img id="hh-live-img" alt="" style="display:none; width:100%; height:100%; object-fit:contain;">
+            <div class="hh-live-placeholder" id="hh-live-placeholder">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                <p>HealthHub Live</p>
+                <small>Browser automation will appear here<br>when Aria performs actions on HealthHub.</small>
+            </div>
+        </div>
+    </div><!-- .hh-live-panel -->
+
+    </div><!-- .agent-view-split -->
 </section>
 
 <!-- ===== VIEW: Doctor Portal ===== -->

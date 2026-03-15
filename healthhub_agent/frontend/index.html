@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HealthHub Agent Bridge</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-title">HealthHub Agent Bridge</div>
+  <div class="header-sep">|</div>
+  <span class="status-dot" id="status-dot"></span>
+  <span class="status-label" id="status-label">Connecting…</span>
+  <div class="url-display" id="url-display">—</div>
+</div>
+
+<!-- Body -->
+<div class="body">
+
+  <!-- Live browser view -->
+  <div class="screen-panel">
+    <div class="screen-label">Live Browser View · 1280 × 800 · ~2 FPS</div>
+    <div class="screen-frame">
+      <img id="screen" alt="Browser screenshot" style="display:none;">
+      <div class="screen-placeholder" id="screen-placeholder">
+        Waiting for browser connection…<br>
+        <small style="color:#1e293b;">Start the server and wait for Playwright to launch Chrome.</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- Side panel -->
+  <div class="side-panel">
+
+    <!-- Action log -->
+    <div class="log-section">
+      <div class="section-title">Action Log</div>
+      <div class="log-list" id="log-list">
+        <div style="color:#334155;font-size:12px;text-align:center;padding:12px;">No actions yet</div>
+      </div>
+    </div>
+
+    <!-- Manual trigger -->
+    <div class="trigger-section">
+      <div class="section-title">Manual Trigger</div>
+
+      <div class="form-row">
+        <div class="form-label">Action</div>
+        <select class="form-select" id="action-select">
+          <option value="">— loading actions… —</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <div class="form-label">Schema</div>
+        <div class="schema-hint" id="schema-hint">Select an action to see its parameters.</div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-label">Params (JSON)</div>
+        <textarea class="form-textarea" id="params-area">{}</textarea>
+      </div>
+
+      <button class="btn-execute" id="btn-execute">Execute Action</button>
+      <div class="exec-status" id="exec-status"></div>
+    </div>
+
+  </div><!-- .side-panel -->
+</div><!-- .body -->
+
+<script src="app.js"></script>
+</body>
+</html>

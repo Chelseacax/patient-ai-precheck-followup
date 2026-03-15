@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HealthHub</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4f8; color: #222; min-height: 100vh; }
+
+  /* ── Header ── */
+  .hh-header {
+    background: #005aab; color: #fff; padding: 0 32px;
+    display: flex; align-items: center; height: 60px; gap: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  }
+  .hh-logo { font-size: 22px; font-weight: 700; letter-spacing: 1px; }
+  .hh-logo span { color: #ffd700; }
+
+  /* ── Layout ── */
+  .hh-layout { display: flex; min-height: calc(100vh - 60px); }
+
+  /* ── Sidebar ── */
+  #sidebar {
+    width: 220px; background: #003f7a; color: #cde; flex-shrink: 0;
+    display: none; flex-direction: column; padding-top: 24px;
+  }
+  #sidebar.visible { display: flex; }
+  .nav-item {
+    padding: 13px 24px; cursor: pointer; font-size: 15px;
+    border-left: 4px solid transparent; transition: background 0.15s;
+  }
+  .nav-item:hover, .nav-item.active { background: #005aab; border-left-color: #ffd700; color: #fff; }
+
+  /* ── Main ── */
+  .hh-main { flex: 1; padding: 32px; }
+  .section { display: none; }
+  .section.active { display: block; }
+
+  /* ── Login ── */
+  #section-login {
+    min-height: calc(100vh - 60px); background: #f0f4f8;
+    display: none; align-items: center; justify-content: center;
+  }
+  #section-login.active { display: flex; }
+  .login-card {
+    background: #fff; border-radius: 12px; padding: 48px 40px;
+    box-shadow: 0 4px 24px rgba(0,90,171,0.12); width: 380px; text-align: center;
+  }
+  .login-card .logo { font-size: 28px; font-weight: 800; color: #005aab; margin-bottom: 4px; }
+  .login-card .logo span { color: #ffd700; }
+  .login-card .subtitle { color: #666; margin-bottom: 32px; font-size: 14px; }
+  .form-group { margin-bottom: 18px; text-align: left; }
+  .form-group label { display: block; font-size: 13px; font-weight: 600; color: #444; margin-bottom: 6px; }
+  .form-group input {
+    width: 100%; padding: 10px 14px; border: 1.5px solid #ccd6e0; border-radius: 6px;
+    font-size: 15px; outline: none; transition: border-color 0.2s;
+  }
+  .form-group input:focus { border-color: #005aab; }
+  .btn-primary {
+    width: 100%; padding: 12px; background: #005aab; color: #fff;
+    border: none; border-radius: 6px; font-size: 16px; font-weight: 600;
+    cursor: pointer; margin-top: 8px; transition: background 0.15s;
+  }
+  .btn-primary:hover { background: #004080; }
+
+  /* ── Cards ── */
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px; margin-bottom: 32px; }
+  .card {
+    background: #fff; border-radius: 10px; padding: 24px 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07); border-top: 4px solid #005aab;
+  }
+  .card .card-label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .card .card-value { font-size: 26px; font-weight: 700; color: #005aab; }
+  .card .card-sub { font-size: 13px; color: #555; margin-top: 4px; }
+
+  /* ── Page title ── */
+  .page-title { font-size: 22px; font-weight: 700; color: #005aab; margin-bottom: 24px; }
+
+  /* ── Table ── */
+  .hh-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+  .hh-table th { background: #005aab; color: #fff; padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 600; }
+  .hh-table td { padding: 12px 16px; border-bottom: 1px solid #e8eef5; font-size: 14px; }
+  .hh-table tr:last-child td { border-bottom: none; }
+  .hh-table tr:hover td { background: #f5f8ff; }
+
+  /* ── Status badges ── */
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+  .badge-confirmed { background: #d4edda; color: #155724; }
+  .badge-pending { background: #fff3cd; color: #856404; }
+  .badge-normal { background: #d4edda; color: #155724; }
+  .badge-review { background: #f8d7da; color: #721c24; }
+
+  /* ── Buttons ── */
+  .btn { padding: 7px 16px; border-radius: 5px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: opacity 0.15s; }
+  .btn:hover { opacity: 0.85; }
+  .btn-sm-primary { background: #005aab; color: #fff; }
+  .btn-sm-danger { background: #dc3545; color: #fff; }
+  #btn-book-appointment { background: #005aab; color: #fff; padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 20px; }
+  #btn-book-appointment:hover { background: #004080; }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    z-index: 1000; align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: #fff; border-radius: 12px; padding: 36px 32px;
+    width: 440px; box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  }
+  .modal-title { font-size: 18px; font-weight: 700; color: #005aab; margin-bottom: 20px; }
+  .modal-form .form-group { margin-bottom: 14px; }
+  .modal-form select, .modal-form input, .modal-form textarea {
+    width: 100%; padding: 9px 12px; border: 1.5px solid #ccd6e0;
+    border-radius: 6px; font-size: 14px; outline: none;
+  }
+  .modal-form select:focus, .modal-form input:focus { border-color: #005aab; }
+  .modal-actions { display: flex; gap: 12px; margin-top: 20px; }
+  #btn-confirm-booking { flex: 1; padding: 10px; background: #005aab; color: #fff; border: none; border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer; }
+  #btn-confirm-booking:hover { background: #004080; }
+  .btn-cancel-modal { flex: 1; padding: 10px; background: #e9ecef; color: #444; border: none; border-radius: 6px; font-size: 15px; cursor: pointer; }
+
+  /* ── Tabs ── */
+  .tab-bar { display: flex; gap: 4px; margin-bottom: 20px; }
+  .tab-btn {
+    padding: 8px 20px; border: none; border-radius: 6px 6px 0 0;
+    cursor: pointer; font-size: 14px; font-weight: 600;
+    background: #dde6f0; color: #005aab;
+  }
+  .tab-btn.active { background: #005aab; color: #fff; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── Profile ── */
+  .profile-card { background: #fff; border-radius: 10px; padding: 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); max-width: 480px; }
+  .profile-row { display: flex; gap: 12px; margin-bottom: 16px; align-items: flex-start; }
+  .profile-label { width: 140px; font-size: 13px; color: #888; font-weight: 600; flex-shrink: 0; padding-top: 2px; }
+  .profile-value { font-size: 15px; color: #222; }
+
+  /* ── Welcome ── */
+  .welcome-banner {
+    background: linear-gradient(90deg, #005aab, #0079d3);
+    color: #fff; border-radius: 12px; padding: 28px 32px; margin-bottom: 28px;
+  }
+  .welcome-banner h2 { font-size: 22px; margin-bottom: 4px; }
+  .welcome-banner p { opacity: 0.85; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="hh-header">
+  <div class="hh-logo">Health<span>Hub</span></div>
+  <div style="font-size:13px;opacity:0.7;margin-left:8px;">Singapore Government Healthcare Portal</div>
+</div>
+
+<!-- Login section (outside layout) -->
+<div id="section-login" class="active">
+  <div class="login-card">
+    <div class="logo">Health<span>Hub</span></div>
+    <div class="subtitle">Your health, your way</div>
+    <div class="form-group">
+      <label>NRIC / FIN</label>
+      <input type="text" id="nric-input" value="S1234567A" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="password-input" value="password123">
+    </div>
+    <button class="btn-primary" id="btn-login">Sign In with Singpass</button>
+  </div>
+</div>
+
+<!-- App layout (sidebar + main) -->
+<div class="hh-layout" id="app-layout" style="display:none;">
+  <!-- Sidebar -->
+  <nav id="sidebar" class="visible">
+    <div class="nav-item active" data-section="dashboard" onclick="showSection('dashboard')">🏠 Dashboard</div>
+    <div class="nav-item" data-section="appointments" onclick="showSection('appointments')">📅 Appointments</div>
+    <div class="nav-item" data-section="medications" onclick="showSection('medications')">💊 Medications</div>
+    <div class="nav-item" data-section="records" onclick="showSection('records')">📋 Health Records</div>
+    <div class="nav-item" data-section="profile" onclick="showSection('profile')">👤 Profile</div>
+  </nav>
+
+  <!-- Main content -->
+  <div class="hh-main">
+
+    <!-- Dashboard -->
+    <div id="section-dashboard" class="section active">
+      <div class="welcome-banner">
+        <h2>Welcome back, Tan Mei Ling</h2>
+        <p>NRIC: S1234567A &nbsp;·&nbsp; Last login: 14 Mar 2026</p>
+      </div>
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-label">Next Appointment</div>
+          <div class="card-value" style="font-size:18px;">20 Mar</div>
+          <div class="card-sub">Dr. Lim – General Practice</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Active Medications</div>
+          <div class="card-value">3</div>
+          <div class="card-sub">All refills current</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Health Score</div>
+          <div class="card-value">82</div>
+          <div class="card-sub">Good</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Lab Results</div>
+          <div class="card-value">3</div>
+          <div class="card-sub">Latest: 1 Mar 2026</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Appointments -->
+    <div id="section-appointments" class="section">
+      <div class="page-title">Appointments</div>
+      <button id="btn-book-appointment">+ Book New Appointment</button>
+      <table class="hh-table">
+        <thead>
+          <tr>
+            <th>Date &amp; Time</th>
+            <th>Doctor</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="appointments-body">
+          <tr class="appointment-row">
+            <td class="appt-date">20 Mar 2026, 09:00</td>
+            <td class="appt-doctor">Dr. Lim Wei Ming</td>
+            <td class="appt-type">General Practice</td>
+            <td class="appt-status"><span class="badge badge-confirmed">Confirmed</span></td>
+            <td><button class="btn btn-sm-danger btn-cancel-appt" onclick="cancelAppt(this)">Cancel</button></td>
+          </tr>
+          <tr class="appointment-row">
+            <td class="appt-date">28 Mar 2026, 14:30</td>
+            <td class="appt-doctor">Dr. Priya Nair</td>
+            <td class="appt-type">Cardiology</td>
+            <td class="appt-status"><span class="badge badge-confirmed">Confirmed</span></td>
+            <td><button class="btn btn-sm-danger btn-cancel-appt" onclick="cancelAppt(this)">Cancel</button></td>
+          </tr>
+          <tr class="appointment-row">
+            <td class="appt-date">5 Apr 2026, 11:00</td>
+            <td class="appt-doctor">Dr. Ahmad Fauzi</td>
+            <td class="appt-type">Physiotherapy</td>
+            <td class="appt-status"><span class="badge badge-pending">Pending</span></td>
+            <td><button class="btn btn-sm-danger btn-cancel-appt" onclick="cancelAppt(this)">Cancel</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Medications -->
+    <div id="section-medications" class="section">
+      <div class="page-title">Medications</div>
+      <table class="hh-table">
+        <thead>
+          <tr><th>Medication</th><th>Dosage</th><th>Frequency</th><th>Prescribing Doctor</th></tr>
+        </thead>
+        <tbody>
+          <tr class="medication-row">
+            <td class="med-name">Metformin</td>
+            <td class="med-dosage">500mg</td>
+            <td class="med-frequency">Twice daily</td>
+            <td class="med-doctor">Dr. Lim Wei Ming</td>
+          </tr>
+          <tr class="medication-row">
+            <td class="med-name">Amlodipine</td>
+            <td class="med-dosage">5mg</td>
+            <td class="med-frequency">Once daily</td>
+            <td class="med-doctor">Dr. Priya Nair</td>
+          </tr>
+          <tr class="medication-row">
+            <td class="med-name">Atorvastatin</td>
+            <td class="med-dosage">20mg</td>
+            <td class="med-frequency">Once daily (night)</td>
+            <td class="med-doctor">Dr. Priya Nair</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Health Records -->
+    <div id="section-records" class="section">
+      <div class="page-title">Health Records</div>
+      <div class="tab-bar">
+        <button class="tab-btn active" id="tab-summary" onclick="showTab('summary')">Summary</button>
+        <button class="tab-btn" id="tab-lab-results" onclick="showTab('lab')">Lab Results</button>
+      </div>
+      <div id="tab-content-summary" class="tab-content active">
+        <div class="profile-card">
+          <div class="profile-row"><div class="profile-label">Blood Type</div><div class="profile-value">B+</div></div>
+          <div class="profile-row"><div class="profile-label">Allergies</div><div class="profile-value">Penicillin, Shellfish</div></div>
+          <div class="profile-row"><div class="profile-label">Chronic Conditions</div><div class="profile-value">Type 2 Diabetes, Hypertension</div></div>
+          <div class="profile-row"><div class="profile-label">BMI</div><div class="profile-value">24.2 (Normal)</div></div>
+          <div class="profile-row"><div class="profile-label">Last Visit</div><div class="profile-value">14 Feb 2026</div></div>
+        </div>
+      </div>
+      <div id="tab-content-lab" class="tab-content">
+        <table class="hh-table">
+          <thead>
+            <tr><th>Date</th><th>Test</th><th>Result</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            <tr class="lab-row">
+              <td class="lab-date">1 Mar 2026</td>
+              <td class="lab-test">HbA1c</td>
+              <td class="lab-result">7.2%</td>
+              <td class="lab-status"><span class="badge badge-review">Review</span></td>
+            </tr>
+            <tr class="lab-row">
+              <td class="lab-date">1 Mar 2026</td>
+              <td class="lab-test">Fasting Glucose</td>
+              <td class="lab-result">6.8 mmol/L</td>
+              <td class="lab-status"><span class="badge badge-review">Review</span></td>
+            </tr>
+            <tr class="lab-row">
+              <td class="lab-date">1 Mar 2026</td>
+              <td class="lab-test">LDL Cholesterol</td>
+              <td class="lab-result">2.4 mmol/L</td>
+              <td class="lab-status"><span class="badge badge-normal">Normal</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Profile -->
+    <div id="section-profile" class="section">
+      <div class="page-title">Profile</div>
+      <div class="profile-card">
+        <div class="profile-row"><div class="profile-label">Full Name</div><div class="profile-value">Tan Mei Ling</div></div>
+        <div class="profile-row"><div class="profile-label">NRIC</div><div class="profile-value">S1234567A</div></div>
+        <div class="profile-row"><div class="profile-label">Date of Birth</div><div class="profile-value">15 Jun 1980 (45 yrs)</div></div>
+        <div class="profile-row"><div class="profile-label">Gender</div><div class="profile-value">Female</div></div>
+        <div class="profile-row"><div class="profile-label">Nationality</div><div class="profile-value">Singaporean</div></div>
+        <div class="profile-row"><div class="profile-label">Contact</div><div class="profile-value">+65 9123 4567</div></div>
+        <div class="profile-row"><div class="profile-label">Email</div><div class="profile-value">tanmeiling@email.com</div></div>
+        <div class="profile-row"><div class="profile-label">Address</div><div class="profile-value">123 Bishan St 12, #08-45, Singapore 570123</div></div>
+        <div class="profile-row"><div class="profile-label">Preferred Language</div><div class="profile-value">English</div></div>
+      </div>
+    </div>
+
+  </div><!-- .hh-main -->
+</div><!-- .hh-layout -->
+
+<!-- Booking Modal -->
+<div id="booking-modal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-title">Book New Appointment</div>
+    <div class="modal-form">
+      <div class="form-group">
+        <label>Specialty</label>
+        <select id="booking-specialty">
+          <option>General Practice</option>
+          <option>Cardiology</option>
+          <option>Endocrinology</option>
+          <option>Physiotherapy</option>
+          <option>Dermatology</option>
+          <option>Ophthalmology</option>
+          <option>Orthopaedics</option>
+          <option>Paediatrics</option>
+          <option>Psychiatry</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Preferred Date</label>
+        <input type="date" id="booking-date">
+      </div>
+      <div class="form-group">
+        <label>Preferred Time</label>
+        <input type="time" id="booking-time" value="09:00">
+      </div>
+      <div class="form-group">
+        <label>Reason for Visit</label>
+        <input type="text" id="booking-reason" placeholder="Brief description...">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel-modal" onclick="closeBookingModal()">Cancel</button>
+      <button id="btn-confirm-booking">Confirm Booking</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SECTIONS = ['login', 'dashboard', 'appointments', 'medications', 'records', 'profile'];
+
+  function showSection(name) {
+    // Hide login
+    document.getElementById('section-login').classList.remove('active');
+    document.getElementById('section-login').style.display = 'none';
+
+    if (name === 'login') {
+      document.getElementById('section-login').classList.add('active');
+      document.getElementById('section-login').style.display = 'flex';
+      document.getElementById('app-layout').style.display = 'none';
+      return;
+    }
+
+    // Show app layout
+    document.getElementById('app-layout').style.display = 'flex';
+
+    // Hide all sections
+    document.querySelectorAll('.hh-main .section').forEach(s => s.classList.remove('active'));
+
+    // Show target
+    const target = document.getElementById('section-' + name);
+    if (target) target.classList.add('active');
+
+    // Update sidebar active state
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.classList.toggle('active', item.dataset.section === name);
+    });
+  }
+
+  function showTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+    if (tab === 'summary') {
+      document.getElementById('tab-summary').classList.add('active');
+      document.getElementById('tab-content-summary').classList.add('active');
+    } else {
+      document.getElementById('tab-lab-results').classList.add('active');
+      document.getElementById('tab-content-lab').classList.add('active');
+    }
+  }
+
+  function cancelAppt(btn) {
+    const row = btn.closest('.appointment-row');
+    if (row) row.remove();
+  }
+
+  function closeBookingModal() {
+    document.getElementById('booking-modal').classList.remove('open');
+  }
+
+  document.getElementById('btn-login').onclick = () => {
+    showSection('dashboard');
+  };
+
+  document.getElementById('btn-book-appointment').onclick = () => {
+    document.getElementById('booking-modal').classList.add('open');
+  };
+
+  document.getElementById('btn-confirm-booking').onclick = () => {
+    const specialty = document.getElementById('booking-specialty').value;
+    const date = document.getElementById('booking-date').value;
+    const time = document.getElementById('booking-time').value;
+    const reason = document.getElementById('booking-reason').value;
+
+    if (!date) { alert('Please select a date'); return; }
+
+    // Add row to table
+    const tbody = document.getElementById('appointments-body');
+    const tr = document.createElement('tr');
+    tr.className = 'appointment-row';
+    tr.innerHTML = `
+      <td class="appt-date">${date} ${time}</td>
+      <td class="appt-doctor">TBC</td>
+      <td class="appt-type">${specialty}</td>
+      <td class="appt-status"><span class="badge badge-pending">Pending</span></td>
+      <td><button class="btn btn-sm-danger btn-cancel-appt" onclick="cancelAppt(this)">Cancel</button></td>
+    `;
+    tbody.appendChild(tr);
+
+    closeBookingModal();
+    // Reset form
+    document.getElementById('booking-date').value = '';
+    document.getElementById('booking-reason').value = '';
+  };
+
+  // Close modal on overlay click
+  document.getElementById('booking-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeBookingModal();
+  });
+</script>
+</body>
+</html>
