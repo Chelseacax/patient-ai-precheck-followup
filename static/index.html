@@ -19,10 +19,6 @@
     </div>
     <div class="topnav-links">
         <button class="nav-btn active" data-view="home" onclick="navigateTo('home')">Home</button>
-        <button class="nav-btn" data-view="checkin" onclick="navigateTo('checkin')">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
-            Book Appointment
-        </button>
         <button class="nav-btn" data-view="agent" onclick="navigateTo('agent')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
             My Health
@@ -51,24 +47,11 @@
 <section id="view-home" class="view active">
     <div class="hero">
         <div class="hero-content">
-            <h1>AI-Powered Voice Pre-Consultation</h1>
-            <p class="hero-sub">Patients speak with Aria, our multilingual voice AI, before seeing the doctor. Aria collects symptoms, history, and concerns — then sends a structured clinical summary directly to the Doctor Portal.</p>
+            <h1>AI-Powered Healthcare Assistant</h1>
+            <p class="hero-sub">Meet Aria, your multilingual voice AI health companion. Book appointments on HealthHub, manage medications, and review health records — all by voice. Doctors receive structured clinical summaries with full bilingual transcripts.</p>
         </div>
 
         <div class="portal-cards">
-            <div class="portal-card checkin-card" onclick="navigateTo('checkin')">
-                <div class="portal-icon checkin-icon">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                </div>
-                <h2>Book Appointment</h2>
-                <p>Speak with Aria before your appointment. Share your symptoms and medical history in your own language — completely hands-free.</p>
-                <ul class="portal-features">
-                    <li>Voice-driven symptom collection</li>
-                    <li>18 languages &amp; dialects supported</li>
-                    <li>Red-flag screening &amp; clinical summary</li>
-                </ul>
-                <span class="portal-cta">Book Appointment &rarr;</span>
-            </div>
             <div class="portal-card agent-card" onclick="navigateTo('agent')">
                 <div class="portal-icon agent-icon">
                     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
@@ -118,127 +101,6 @@
                 </div>
                 <h3>Clinical Summaries</h3>
                 <p>Structured reports with chief complaints, medications, red flags, and cultural considerations</p>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- ===== VIEW: Book Appointment (Voice AI Agent) ===== -->
-<section id="view-checkin" class="view">
-    <div class="portal-label checkin-label">Book Appointment</div>
-
-    <!-- Step 1: Setup form -->
-    <div id="checkin-setup" class="checkin-step active">
-        <div class="container-narrow">
-            <div class="card card-elevated">
-                <div class="checkin-aria-avatar">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                </div>
-                <div class="card-header" style="text-align:center">
-                    <h2>Meet Aria</h2>
-                    <p class="text-muted">Your AI voice assistant. Aria will ask about your symptoms and medical history before your appointment, then send a summary to your doctor.</p>
-                </div>
-                <form id="form-checkin" onsubmit="handleCheckinSetup(event)">
-                    <div class="form-group">
-                        <label for="checkin-name">Full Name <span class="required">*</span></label>
-                        <input type="text" id="checkin-name" required placeholder="e.g. Ahmad bin Ibrahim" autocomplete="name">
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="checkin-dob">Date of Birth</label>
-                            <input type="date" id="checkin-dob">
-                        </div>
-                        <div class="form-group">
-                            <label for="checkin-language">Preferred Language <span class="required">*</span></label>
-                            <select id="checkin-language" required onchange="updateCheckinDialects()"></select>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="checkin-dialect">Dialect / Variant</label>
-                        <select id="checkin-dialect"><option value="">— Select —</option></select>
-                    </div>
-                    <div class="form-group">
-                        <label for="checkin-cultural">Cultural Considerations <span class="text-muted">(optional)</span></label>
-                        <textarea id="checkin-cultural" rows="2" placeholder="e.g. Halal dietary requirements; family makes health decisions together…"></textarea>
-                    </div>
-                    <button type="submit" class="btn btn-checkin btn-block" id="btn-start-checkin">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
-                        Book Appointment
-                    </button>
-                    <p class="text-muted" style="font-size:0.8rem;text-align:center;margin-top:0.75rem;">You can also type your responses if you prefer.</p>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- Step 2: Voice Conversation -->
-    <div id="checkin-chat" class="checkin-step">
-        <div class="chat-container">
-            <div class="chat-header">
-                <div class="chat-header-left">
-                    <button class="btn btn-icon" onclick="backToCheckinSetup()" title="Back">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-                    </button>
-                    <div>
-                        <h3 id="checkin-chat-title">Aria — Voice Check-In</h3>
-                        <span class="badge checkin-badge" id="checkin-lang-badge">English</span>
-                        <span class="badge badge-outline">Pre-Consultation</span>
-                    </div>
-                </div>
-                <div class="checkin-header-actions">
-                    <button class="btn btn-icon btn-sm" id="btn-auto-toggle" onclick="toggleAutoMode()" title="Toggle auto voice loop">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
-                        <span id="auto-mode-label">Auto On</span>
-                    </button>
-                    <button class="btn btn-success" id="btn-send-to-doctor" onclick="completeCheckin()">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                        Send to Doctor
-                    </button>
-                </div>
-            </div>
-
-            <!-- Listening / speaking indicator -->
-            <div id="checkin-voice-indicator" class="checkin-voice-indicator hidden">
-                <div class="voice-pulse-ring"></div>
-                <div class="voice-pulse-ring delay-1"></div>
-                <div class="voice-pulse-ring delay-2"></div>
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
-                <span id="checkin-voice-status-text">Listening…</span>
-            </div>
-
-            <div class="chat-messages" id="checkin-messages"></div>
-
-            <div id="checkin-voice-status" class="voice-status">
-                <span class="voice-status-dot"></span>
-                <span id="checkin-status-text">Listening…</span>
-            </div>
-
-            <div class="chat-input-bar">
-                <textarea id="checkin-input" rows="1" placeholder="Type or let Aria listen automatically…" onkeydown="handleCheckinKey(event)" oninput="autoResize(this)"></textarea>
-                <button class="btn btn-mic" id="btn-checkin-mic" onclick="toggleCheckinVoice()" title="Speak your response">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                </button>
-                <button class="btn btn-primary btn-icon" id="btn-checkin-send" onclick="sendCheckinMessage()">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Step 3: Summary (shown to patient after sending to doctor) -->
-    <div id="checkin-summary" class="checkin-step">
-        <div class="container-narrow">
-            <div class="card card-elevated checkin-confirm-card">
-                <div class="checkin-confirm-icon">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                </div>
-                <h2>Sent to Your Doctor!</h2>
-                <p class="text-muted">Your check-in summary has been forwarded to the Doctor Portal. Here is a summary of what was shared:</p>
-                <div id="checkin-summary-content" class="summary-content"></div>
-                <div class="card-actions">
-                    <button class="btn btn-checkin" onclick="backToCheckinSetup()">New Booking</button>
-                    <button class="btn btn-outline" onclick="navigateTo('home')">Back to Home</button>
-                </div>
             </div>
         </div>
     </div>

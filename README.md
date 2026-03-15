@@ -1,6 +1,6 @@
 # MedBridge — Voice AI Healthcare Assistant
 
-MedBridge is an AI-powered, voice-first healthcare platform built for Singapore's multilingual population. It combines a conversational health assistant (Aria), real-time HealthHub browser automation, and a multilingual pre/post-consultation tool into a single web app.
+MedBridge is an AI-powered, voice-first healthcare platform built for Singapore's multilingual population. It combines a conversational health assistant (Aria) with real-time HealthHub browser automation and a Doctor Portal into a single web app.
 
 ## What It Does
 
@@ -12,9 +12,6 @@ Talk to Aria, MedBridge's AI health assistant, entirely by voice or text. Aria c
 - **Support family members** — manage dependants' health records
 
 The right panel streams a live view of the Playwright-controlled Chrome browser as Aria fills in forms on the real HealthHub WebApp.
-
-### Book Appointment — Voice Pre-Consultation
-Voice-guided check-in flow before a GP or specialist visit. Collects chief complaints, symptoms, medications, allergies, and red-flag screening in the patient's language, then generates a structured clinical summary for the clinician.
 
 ### Doctor Portal
 Browse all patient sessions, view clinical summaries, and read full conversation transcripts.
@@ -149,12 +146,6 @@ Ask Aria things like:
 - *"Show me my upcoming appointments"*
 - *"What medications am I on?"*
 - *"Give me a health summary"*
-
-### Voice Pre-Consultation
-
-1. Click **Book Appointment** in the top navigation
-2. Select your language and dialect
-3. Speak with Aria about your symptoms — she will prepare a clinical summary for your doctor
 
 ---
 
