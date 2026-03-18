@@ -25,6 +25,8 @@ try:
     from google.cloud import texttospeech
 except Exception:
     texttospeech = None
+import base64
+import requests as http_requests
 
 load_dotenv()
 
@@ -1401,11 +1403,10 @@ def _normalize_tts_language(language_code):
 def text_to_speech():
     """
     Synthesize speech using Google Cloud Text-to-Speech.
-    Uses ADC credentials configured via gcloud auth application-default login.
+    Supports two auth methods (checked in order):
+      1. GOOGLE_TTS_API_KEY in .env  → uses REST API (no gcloud login needed)
+      2. ADC via gcloud auth application-default login → uses Python client library
     """
-    if texttospeech is None:
-        return jsonify({"error": "google-cloud-texttospeech package is not installed."}), 500
-
     data = request.get_json() or {}
     text = (data.get("text") or "").strip()
     if not text:
@@ -1425,30 +1426,73 @@ def text_to_speech():
     speaking_rate = max(0.25, min(4.0, speaking_rate))
     pitch = max(-20.0, min(20.0, pitch))
 
-    try:
-        client = texttospeech.TextToSpeechClient()
-        voice_kwargs = {"language_code": language_code}
-        if voice_name:
-            voice_kwargs["name"] = voice_name
+    api_key = os.getenv("GOOGLE_TTS_API_KEY", "").strip()
 
-        response = client.synthesize_speech(
-            input=texttospeech.SynthesisInput(text=text),
-            voice=texttospeech.VoiceSelectionParams(**voice_kwargs),
-            audio_config=texttospeech.AudioConfig(
-                audio_encoding=texttospeech.AudioEncoding.MP3,
-                speaking_rate=speaking_rate,
-                pitch=pitch,
-            ),
-        )
+    if api_key:
+        # --- Method 1: REST API with API Key (no gcloud login needed) ---
+        try:
+            voice_payload = {
+                "languageCode": language_code,
+                "ssmlGender": "FEMALE",
+            }
+            if voice_name:
+                voice_payload["name"] = voice_name
 
-        return Response(
-            response.audio_content,
-            mimetype="audio/mpeg",
-            headers={"Cache-Control": "no-store"},
-        )
-    except Exception as e:
-        app.logger.error("Google TTS error: %s", e)
-        return jsonify({"error": f"Google TTS failed: {str(e)[:250]}"}), 502
+            payload = {
+                "input": {"text": text},
+                "voice": voice_payload,
+                "audioConfig": {
+                    "audioEncoding": "MP3",
+                    "speakingRate": speaking_rate,
+                    "pitch": pitch,
+                },
+            }
+            resp = http_requests.post(
+                f"https://texttospeech.googleapis.com/v1/text:synthesize?key={api_key}",
+                json=payload,
+                timeout=10,
+            )
+            resp.raise_for_status()
+            audio_content = base64.b64decode(resp.json()["audioContent"])
+            return Response(
+                audio_content,
+                mimetype="audio/mpeg",
+                headers={"Cache-Control": "no-store"},
+            )
+        except Exception as e:
+            app.logger.error("Google TTS (API key) error: %s", e)
+            return jsonify({"error": f"Google TTS failed: {str(e)[:250]}"}), 502
+
+    else:
+        # --- Method 2: ADC via gcloud auth application-default login ---
+        if texttospeech is None:
+            return jsonify({"error": "Set GOOGLE_TTS_API_KEY in .env or install google-cloud-texttospeech and run gcloud auth application-default login."}), 500
+        try:
+            client = texttospeech.TextToSpeechClient()
+            voice_kwargs = {
+                "language_code": language_code,
+                "ssml_gender": texttospeech.SsmlVoiceGender.FEMALE,
+            }
+            if voice_name:
+                voice_kwargs["name"] = voice_name
+
+            response = client.synthesize_speech(
+                input=texttospeech.SynthesisInput(text=text),
+                voice=texttospeech.VoiceSelectionParams(**voice_kwargs),
+                audio_config=texttospeech.AudioConfig(
+                    audio_encoding=texttospeech.AudioEncoding.MP3,
+                    speaking_rate=speaking_rate,
+                    pitch=pitch,
+                ),
+            )
+            return Response(
+                response.audio_content,
+                mimetype="audio/mpeg",
+                headers={"Cache-Control": "no-store"},
+            )
+        except Exception as e:
+            app.logger.error("Google TTS (ADC) error: %s", e)
+            return jsonify({"error": f"Google TTS failed: {str(e)[:250]}"}), 502
 
 
 @app.route("/api/voice", methods=["POST"])
