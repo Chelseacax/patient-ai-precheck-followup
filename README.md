@@ -11,7 +11,7 @@ Talk to Aria, MedBridge's AI health assistant, entirely by voice or text. Aria c
 - **Answer health questions** and provide health summaries
 - **Support family members** — manage dependants' health records
 
-The right panel streams a live view of the Playwright-controlled Chrome browser as Aria fills in forms on the real HealthHub WebApp.
+The right panel streams a live view of the Playwright-controlled Chrome browser as Aria fills in forms on HealthHub.
 
 ### Doctor Portal
 Browse all patient sessions, view clinical summaries, and read full conversation transcripts.
@@ -41,9 +41,8 @@ Browse all patient sessions, view clinical summaries, and read full conversation
                                      │ Playwright controls
                                      ▼
                           ┌─────────────────────────┐
-                          │  HealthHub WebApp        │
-                          │  React / Vite            │
-                          │  (port 5173)             │
+                          │  HealthHub              │
+                          │  (Playwright-controlled) │
                           └─────────────────────────┘
 ```
 
@@ -65,7 +64,6 @@ Browse all patient sessions, view clinical summaries, and read full conversation
 | LLM | SEA-LION (`aisingapore/Qwen-SEA-LION-v4-32B-IT`) |
 | Browser Automation | Playwright (async, headed Chromium) |
 | Bridge Server | FastAPI + Uvicorn |
-| HealthHub WebApp | React + Vite + Tailwind CSS |
 
 ---
 
@@ -73,7 +71,6 @@ Browse all patient sessions, view clinical summaries, and read full conversation
 
 ### Prerequisites
 - Python 3.11+
-- Node.js 18+
 
 ### 1. Install Python dependencies
 
@@ -92,16 +89,7 @@ SEALION_API_KEY=your-sea-lion-api-key-here
 SECRET_KEY=any-random-string
 ```
 
-### 3. Start the HealthHub WebApp
-
-```bash
-cd "HealthHub WebApp"
-npm install
-npm run dev
-# Runs on http://localhost:5173
-```
-
-### 4. Start the HealthHub Agent Bridge
+### 3. Start the HealthHub Agent Bridge
 
 ```bash
 cd healthhub_agent
@@ -110,7 +98,7 @@ python3 server.py
 # Opens a headed Chrome window automatically
 ```
 
-### 5. Start MedBridge
+### 4. Start MedBridge
 
 ```bash
 # From project root
@@ -118,7 +106,7 @@ python3 app.py
 # Runs on http://localhost:5001
 ```
 
-### 6. Open in browser
+### 5. Open in browser
 
 Navigate to **http://localhost:5001**
 
@@ -164,10 +152,6 @@ ai_challenge/
 │   ├── dispatcher.py         # Playwright singleton — booking automation
 │   ├── requirements.txt
 │   └── actions/              # Action registry (extensible)
-├── HealthHub WebApp/         # React/Vite mock HealthHub portal
-│   └── src/
-│       └── app/pages/
-│           └── AppointmentsPage.tsx   # Booking wizard (4-step flow)
 └── instance/
     └── medbridge.db          # SQLite database
 ```
