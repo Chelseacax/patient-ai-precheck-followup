@@ -1629,15 +1629,12 @@ def _normalize_tts_language(language_code):
 @app.route("/api/tts", methods=["POST"])
 def text_to_speech():
     """
-<<<<<<< HEAD
-    Synthesize speech using Google Cloud Text-to-Speech.
-    Supports two auth methods (checked in order):
-      1. GOOGLE_TTS_API_KEY in .env  → uses REST API (no gcloud login needed)
-      2. ADC via gcloud auth application-default login → uses Python client library
-=======
     Synthesize speech using OpenAI TTS if OPENAI_API_KEY is present (much more realistic),
     otherwise fallback to Google Cloud Text-to-Speech.
->>>>>>> d958c9bc (agent needs alot of promting to work)
+    
+    Google Cloud TTS supports two auth methods:
+      1. GOOGLE_TTS_API_KEY in .env → uses REST API
+      2. ADC via gcloud auth application-default login → uses Python client library
     """
     data = request.get_json() or {}
     text = (data.get("text") or "").strip()
@@ -1663,9 +1660,6 @@ def text_to_speech():
             app.logger.warning("OpenAI TTS failed, falling back to Google: %s", e)
 
     # Fallback: Google Cloud TTS
-    if texttospeech is None:
-        return jsonify({"error": "google-cloud-texttospeech package is not installed."}), 500
-
     language_code = _normalize_tts_language(data.get("language_code", "en-SG"))
     # Use higher quality voices if standard is requested
     voice_name = (data.get("voice_name") or "").strip() or None
@@ -1681,18 +1675,10 @@ def text_to_speech():
     except (TypeError, ValueError):
         return jsonify({"error": "speaking_rate and pitch must be numbers"}), 400
 
-<<<<<<< HEAD
     speaking_rate = max(0.25, min(4.0, speaking_rate))
     pitch = max(-20.0, min(20.0, pitch))
 
     api_key = os.getenv("GOOGLE_TTS_API_KEY", "").strip()
-=======
-    try:
-        client = texttospeech.TextToSpeechClient()
-        voice_kwargs = {"language_code": language_code}
-        if voice_name:
-            voice_kwargs["name"] = voice_name
->>>>>>> d958c9bc (agent needs alot of promting to work)
 
     if api_key:
         # --- Method 1: REST API with API Key (no gcloud login needed) ---
@@ -1704,7 +1690,6 @@ def text_to_speech():
             if voice_name:
                 voice_payload["name"] = voice_name
 
-<<<<<<< HEAD
             payload = {
                 "input": {"text": text},
                 "voice": voice_payload,
@@ -1728,12 +1713,10 @@ def text_to_speech():
             )
         except Exception as e:
             app.logger.error("Google TTS (API key) error: %s", e)
-            return jsonify({"error": f"Google TTS failed: {str(e)[:250]}"}), 502
+            # Fall through
 
-    else:
-        # --- Method 2: ADC via gcloud auth application-default login ---
-        if texttospeech is None:
-            return jsonify({"error": "Set GOOGLE_TTS_API_KEY in .env or install google-cloud-texttospeech and run gcloud auth application-default login."}), 500
+    # --- Method 2: ADC via gcloud auth application-default login ---
+    if texttospeech is not None:
         try:
             client = texttospeech.TextToSpeechClient()
             voice_kwargs = {
@@ -1759,33 +1742,32 @@ def text_to_speech():
             )
         except Exception as e:
             app.logger.error("Google TTS (ADC) error: %s", e)
-            return jsonify({"error": f"Google TTS failed: {str(e)[:250]}"}), 502
-=======
+            # Fall through
+    else:
+        app.logger.warning("google-cloud-texttospeech package is not installed. Cannot use ADC.")
+
+    # --- Ultimate Fallback: gTTS ---
+    try:
+        from gtts import gTTS
+        import io
+        app.logger.info("Using gTTS fallback.")
+        # gTTS language mapping is simpler, often just the two-letter code
+        gtts_lang = language_code.split('-')[0] if '-' in language_code else language_code
+        # Default to 'en' if specific language not supported by gTTS or not found
+        if gtts_lang not in gTTS.LANGUAGES:
+            gtts_lang = 'en'
+
+        tts_res = gTTS(text=text, lang=gtts_lang, tld="sg")
+        fp = io.BytesIO()
+        tts_res.write_to_fp(fp)
         return Response(
-            response.audio_content,
+            fp.getvalue(),
             mimetype="audio/mpeg",
-            headers={"Cache-Control": "no-store"},
+            headers={"Cache-Control": "no-store"}
         )
-    except Exception as e:
-        app.logger.error("Google TTS error: %s", e)
-        
-        # Ultimate Fallback: gTTS
-        try:
-            from gtts import gTTS
-            import io
-            app.logger.info("Using gTTS fallback.")
-            tts_res = gTTS(text=text, lang="en", tld="sg")
-            fp = io.BytesIO()
-            tts_res.write_to_fp(fp)
-            return Response(
-                fp.getvalue(),
-                mimetype="audio/mpeg",
-                headers={"Cache-Control": "no-store"}
-            )
-        except Exception as gtts_e:
-            app.logger.error("gTTS fallback failed: %s", gtts_e)
-            return jsonify({"error": f"TTS completely failed: {str(e)[:250]}"}), 502
->>>>>>> d958c9bc (agent needs alot of promting to work)
+    except Exception as gtts_e:
+        app.logger.error("gTTS fallback failed: %s", gtts_e)
+        return jsonify({"error": "TTS completely failed."}), 502
 
 
 @app.route("/api/voice", methods=["POST"])
@@ -2533,7 +2515,7 @@ with app.app_context():
         db.session.rollback()
 
     db.create_all()
-
+            
     # Add is_urgent to session if DB existed before (SQLite)
     try:
         db.session.execute(db.text("ALTER TABLE session ADD COLUMN is_urgent BOOLEAN DEFAULT 0"))
