@@ -1,5 +1,7 @@
 # MedBridge — Voice AI Healthcare Assistant
 
+[![Watch the video](https://img.youtube.com/vi/EFrM4J2v5wY/maxresdefault.jpg)](https://www.youtube.com/watch?v=EFrM4J2v5wY)
+
 MedBridge is an AI-powered, voice-first healthcare platform built for Singapore's multilingual population. It combines a conversational health assistant (Aria) with real-time HealthHub browser automation and a Doctor Portal into a single web app.
 
 ---
