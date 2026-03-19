@@ -6,15 +6,18 @@ MedBridge is an AI-powered, voice-first healthcare platform built for Singapore'
 
 ### My Health — Aria (Agentic Voice AI)
 Talk to Aria, MedBridge's AI health assistant, entirely by voice or text. Aria can:
-- **Book appointments on HealthHub** — asks you one question at a time (hospital → department → date → time → reason), then automates the entire HealthHub booking form live in the right panel while you watch
+- **Book appointments on HealthHub** — collects your symptoms one question at a time, then navigates the live HealthHub portal interactively, reading real options from the page (available hospitals, services, dates, timeslots) before confirming with you
 - **View your appointments, medications, and lab reports** from the database
 - **Answer health questions** and provide health summaries
 - **Support family members** — manage dependants' health records
 
-The right panel streams a live view of the Playwright-controlled Chrome browser as Aria fills in forms on HealthHub.
+The right panel streams a live view of the Playwright-controlled Chrome browser as Aria navigates HealthHub.
 
 ### Doctor Portal
-Browse all patient sessions, view clinical summaries, and read full conversation transcripts.
+Browse all patient appointment bookings and consultation sessions. Each appointment includes a structured symptom summary collected by Aria before booking — chief complaint, duration, severity, and associated symptoms.
+
+- **Appointments tab** — all bookings made via Aria with full symptom summaries
+- **Consultations tab** — voice check-in sessions with clinical summaries and bilingual transcripts
 
 ---
 
@@ -33,10 +36,10 @@ Browse all patient sessions, view clinical summaries, and read full conversation
 ┌─────────────────────┐   ┌─────────────────────────────┐
 │  Flask Backend      │   │  HealthHub Agent Bridge     │
 │  (port 5001)        │──▶│  FastAPI + Playwright       │
-│  - SEA-LION LLM     │   │  (port 7001)                │
+│  - OpenRouter LLM   │   │  (port 7001)                │
 │  - Agentic loop     │   │  - Headed Chrome browser    │
-│  - SQLite DB        │   │  - Full booking automation  │
-│  - 11 tools         │   │  - Screenshot streaming     │
+│  - SQLite DB        │   │  - Interactive navigation   │
+│  - 13 tools         │   │  - Screenshot streaming     │
 └─────────────────────┘   └──────────┬──────────────────┘
                                      │ Playwright controls
                                      ▼
@@ -47,9 +50,10 @@ Browse all patient sessions, view clinical summaries, and read full conversation
 ```
 
 **Key design decisions:**
-- LLM (SEA-LION) is the reasoning brain — it decides when/what to book, not hardcoded scripts
-- Playwright automation is a reliable tool the LLM calls, not a fragile vision-based agent
-- WebSocket streams JPEG screenshots ~2 FPS so users watch automation happen live
+- LLM (OpenRouter / GPT-4o) is the reasoning brain — reads the live page and decides what to click
+- Aria follows what is actually on screen, not hardcoded scripts — real options are read and presented to the user
+- Symptom collection happens before every booking — structured summary saved to DB for doctors
+- WebSocket streams JPEG screenshots ~2 FPS so users watch navigation happen live
 - `asyncio.Lock()` serialises all browser actions — no concurrent automation
 - Auto-recovery: if Chrome window is closed, bridge restarts it automatically
 
@@ -61,7 +65,8 @@ Browse all patient sessions, view clinical summaries, and read full conversation
 |-------|-----------|
 | Frontend | Vanilla JS SPA, Web Speech API (STT/TTS) |
 | Backend | Flask + SQLite (SQLAlchemy) |
-| LLM | SEA-LION (`aisingapore/Qwen-SEA-LION-v4-32B-IT`) |
+| LLM | OpenRouter (`openai/gpt-4o`) with SEA-LION / Groq fallback |
+| TTS | Google Cloud TTS (female voice, multilingual) |
 | Browser Automation | Playwright (async, headed Chromium) |
 | Bridge Server | FastAPI + Uvicorn |
 
@@ -85,8 +90,14 @@ playwright install chromium
 Create a `.env` file in the project root:
 
 ```env
-SEALION_API_KEY=your-sea-lion-api-key-here
+OPENROUTER_API_KEY=your-openrouter-api-key
+LLM_MODEL=openai/gpt-4o
+GOOGLE_TTS_API_KEY=your-google-tts-api-key
 SECRET_KEY=any-random-string
+
+# Optional fallbacks
+SEALION_API_KEY=your-sea-lion-api-key
+GROQ_API_KEY=your-groq-api-key
 ```
 
 ### 3. Start the HealthHub Agent Bridge
@@ -119,14 +130,22 @@ Navigate to **http://localhost:5001**
 1. Click **My Health** in the top navigation
 2. Enter your name and preferred language, click **Start with Aria**
 3. Say or type: *"I want to book an appointment"*
-4. Aria asks one question at a time:
+4. Aria collects information in two phases:
+
+   **Phase A — Before navigating (chat):**
    - Which hospital or polyclinic?
-   - Which department?
-   - What date?
-   - What time?
-   - Reason for visit?
-5. Once all details are collected, Aria says *"Got it! Let me book that for you now."*
-6. Watch the right panel — Playwright fills the entire HealthHub form automatically
+   - What is your main concern today?
+   - How long have you had this?
+   - How would you rate it — mild, moderate, or severe?
+   - Any other symptoms?
+
+   **Phase B — On HealthHub (interactive):**
+   - Aria navigates to the appointments page
+   - Reads available services, locations, dates, and timeslots from the live page
+   - Presents real options to you and clicks your selections
+   - Shows a booking summary and asks for your confirmation before submitting
+
+5. Watch the right panel as Aria navigates HealthHub in real time
 
 ### Viewing Health Information
 
@@ -134,6 +153,12 @@ Ask Aria things like:
 - *"Show me my upcoming appointments"*
 - *"What medications am I on?"*
 - *"Give me a health summary"*
+
+### Doctor Portal
+
+Click **Doctor Portal** in the top navigation to:
+- **Appointments tab** — view all appointments booked via Aria, with the symptom summary collected before booking
+- **Consultations tab** — view patient voice check-in sessions, clinical summaries, and bilingual transcripts
 
 ---
 
@@ -149,7 +174,7 @@ ai_challenge/
 │   └── styles.css            # Design system
 ├── healthhub_agent/          # Browser automation bridge
 │   ├── server.py             # FastAPI server (port 7001)
-│   ├── dispatcher.py         # Playwright singleton — booking automation
+│   ├── dispatcher.py         # Playwright singleton — HealthHub navigation
 │   ├── requirements.txt
 │   └── actions/              # Action registry (extensible)
 └── instance/
@@ -166,21 +191,21 @@ MedBridge uses a **tool-augmented agentic loop**:
 User message
      │
      ▼
-SEA-LION LLM  (run_agent loop, up to 6 iterations)
+LLM (OpenRouter/GPT-4o)  (run_agent loop, up to 12 iterations)
      │
-     ├── Asks follow-up question → responds with text
+     ├── Asks symptom questions one at a time → responds with text
      │
      └── Calls a tool:
-           ├── book_on_healthhub(institution, specialty, date, time, reason)
-           │     └── POST /api/booking/full → Playwright runs 12-step automation
-           ├── view_healthhub(page)
+           ├── view_healthhub(page)          → navigate browser to HealthHub page
+           ├── interact_with_screen(...)     → read_page / click_text / scroll
            ├── get_appointments(patient_id)
            ├── get_medications(patient_id)
+           ├── book_appointment(...)         → save booking to DB with symptom summary
            ├── get_health_summary(patient_id)
-           └── ... 11 tools total
+           └── ... 13 tools total
 ```
 
-The LLM autonomously decides when it has enough information to act. It reasons over the full conversation history and calls the right tool at the right time.
+The LLM reads the live browser screen after every interaction and decides the next action based on what it sees — no hardcoded click sequences.
 
 ---
 
@@ -202,15 +227,16 @@ English, Mandarin Chinese, Malay, Tamil, Hindi, Arabic, Tagalog, Vietnamese, Kor
 | GET | `/api/appointments?patient_id=` | List appointments |
 | GET | `/api/medications?patient_id=` | List medications |
 | GET | `/api/health-summary?patient_id=` | Full health overview |
-| POST | `/api/sessions` | Start pre/post-consultation session |
-| POST | `/api/sessions/<id>/message` | Chat message |
-| GET | `/api/sessions` | List all sessions (doctor portal) |
+| GET | `/api/doctor/appointments` | All appointments with symptom summaries (Doctor Portal) |
+| GET | `/api/sessions` | List consultation sessions (Doctor Portal) |
+| GET | `/api/sessions/<id>` | Session detail with transcript |
 
 **Bridge (port 7001):**
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/status` | Browser ready status |
-| POST | `/api/booking/full` | Run full HealthHub booking automation |
 | POST | `/api/navigate` | Navigate HealthHub to a specific page |
+| POST | `/api/browser/action` | Execute a browser action (click, scroll, read) |
+| GET | `/api/browser/state` | Current screenshot + URL |
 | WS | `/ws` | Screenshot stream + action events |
