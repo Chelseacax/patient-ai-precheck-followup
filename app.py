@@ -284,16 +284,9 @@ SUPPORTED_LANGUAGES = {
         "group": "Singapore Official Languages",
     },
     # --- Singapore Chinese Dialects ---
-    # Cantonese and Hokkien are exposed for speech capture.
-    # Note: Hokkien has limited written-form standardization, so downstream LLM quality may vary.
     "广东话 (Cantonese)": {
         "dialects": ["新加坡广东话 (Singapore Cantonese)", "香港广东话 (Hong Kong Cantonese)"],
         "code": "zh-cantonese",
-        "group": "Singapore Chinese Dialects",
-    },
-    "福建话 (Hokkien)": {
-        "dialects": ["Singapore Hokkien", "Taiwanese Hokkien"],
-        "code": "nan",
         "group": "Singapore Chinese Dialects",
     },
     # --- Southeast Asian Languages ---
@@ -1617,13 +1610,36 @@ def _normalize_tts_language(language_code):
     code = (language_code or "en-SG").strip()
     overrides = {
         "zh-SG": "cmn-CN",
+        "zh-CN": "cmn-CN",
         "zh-cantonese": "yue-HK",
         "yue-SG": "yue-HK",
-        "nan": "cmn-CN",      # No native Hokkien voice in Google TTS
-        "nan-SG": "cmn-CN",   # fallback to Mandarin
-        "nan-TW": "cmn-CN",   # fallback to Mandarin
     }
     return overrides.get(code, code)
+
+
+# Best female WaveNet/Neural2 voice per language code
+_TTS_VOICE_MAP = {
+    "cmn-CN":  "cmn-CN-Wavenet-D",   # Mandarin Chinese — female, natural
+    "yue-HK":  "yue-HK-Standard-A",  # Cantonese — female
+    "en-SG":   None,                  # Let Google pick (no en-SG Neural2 exists)
+    "en-US":   "en-US-Neural2-F",
+    "en-GB":   "en-GB-Neural2-A",
+    "ms-MY":   "ms-MY-Wavenet-A",
+    "ta-SG":   "ta-IN-Wavenet-A",
+    "ta-IN":   "ta-IN-Wavenet-A",
+    "hi-IN":   "hi-IN-Wavenet-A",
+    "ko-KR":   "ko-KR-Neural2-A",
+    "ja-JP":   "ja-JP-Neural2-B",
+    "vi-VN":   "vi-VN-Neural2-A",
+    "fr-FR":   "fr-FR-Neural2-A",
+    "es-ES":   "es-ES-Neural2-A",
+    "pt-BR":   "pt-BR-Neural2-A",
+}
+
+
+def _get_tts_voice(language_code):
+    """Return best female voice name for a given language code, or None to let Google decide."""
+    return _TTS_VOICE_MAP.get(language_code)
 
 
 @app.route("/api/tts", methods=["POST"])
@@ -1661,8 +1677,7 @@ def text_to_speech():
 
     # Fallback: Google Cloud TTS
     language_code = _normalize_tts_language(data.get("language_code", "en-SG"))
-    # Use higher quality voices if standard is requested
-    voice_name = (data.get("voice_name") or "").strip() or None
+    voice_name = (data.get("voice_name") or "").strip() or _get_tts_voice(language_code)
     
     speaking_rate = data.get("speaking_rate", 0.92)
     pitch = data.get("pitch", 0.0)

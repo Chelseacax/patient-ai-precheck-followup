@@ -16,7 +16,6 @@ const SPEECH_LANG_MAP = {
     'ms':           'ms-MY',
     'ta':           'ta-SG',
     'zh-cantonese': 'yue-HK',
-    'nan':          'nan-TW',
     'hi':           'hi-IN',
     'tl':           'fil-PH',
     'vi':           'vi-VN',
@@ -34,8 +33,6 @@ const DIALECT_SPEECH_LANG_MAP = {
     '标准普通话 (standard mandarin)': 'zh-CN',
     '新加坡广东话 (singapore cantonese)': 'yue-SG',
     '香港广东话 (hong kong cantonese)': 'yue-HK',
-    'singapore hokkien': 'nan-SG',
-    'taiwanese hokkien': 'nan-TW',
 };
 
 function resolveSpeechLang(code, dialect = '') {
@@ -190,11 +187,6 @@ function populateCheckinLanguageDropdown() {
     if (!sel) return;
     sel.innerHTML = '';
 
-    const auto = document.createElement('option');
-    auto.value = AUTO_DETECT_VALUE;
-    auto.textContent = 'Auto-detect from first message';
-    sel.appendChild(auto);
-
     // Build optgroups dynamically from the group field returned by the API
     const grouped = {};
     const groupOrder = [];
@@ -222,10 +214,6 @@ function updateCheckinDialects() {
     const sel = document.getElementById('checkin-dialect');
     if (!sel) return;
     sel.innerHTML = '<option value="">— Select —</option>';
-    if (lang === AUTO_DETECT_VALUE) {
-        sel.disabled = true;
-        return;
-    }
     sel.disabled = false;
     const dialects = state.languages[lang]?.dialects || [];
     for (const d of dialects) {
@@ -1078,10 +1066,6 @@ function populateAgentLanguageDropdown() {
     if (!sel) return;
     sel.innerHTML = '';
 
-    const auto = document.createElement('option');
-    auto.value = AUTO_DETECT_VALUE;
-    auto.textContent = 'Auto-detect from first message';
-    sel.appendChild(auto);
     const grouped = {};
     const groupOrder = [];
     for (const [lang, data] of Object.entries(state.languages)) {
@@ -1108,10 +1092,6 @@ function updateAgentDialects() {
     const sel = document.getElementById('agent-dialect');
     if (!sel) return;
     sel.innerHTML = '<option value="">— Select —</option>';
-    if (lang === AUTO_DETECT_VALUE) {
-        sel.disabled = true;
-        return;
-    }
     sel.disabled = false;
     const dialects = state.languages[lang]?.dialects || [];
     for (const d of dialects) {
@@ -1131,14 +1111,13 @@ async function handleAgentSetup(e) {
     const name = document.getElementById('agent-name').value.trim();
     const language = document.getElementById('agent-language').value;
     const dialect = document.getElementById('agent-dialect')?.value || '';
-    const autoDetect = language === AUTO_DETECT_VALUE;
 
     const langData = state.languages[language];
-    agentState.langCode = autoDetect ? 'en' : (langData?.code || 'en');
-    agentState.langName = autoDetect ? 'Auto-detect' : language;
-    agentState.dialect = autoDetect ? '' : dialect;
+    agentState.langCode = langData?.code || 'en';
+    agentState.langName = language;
+    agentState.dialect = dialect;
     agentState.isAutoMode = true;
-    agentState.pendingLanguageDetect = autoDetect;
+    agentState.pendingLanguageDetect = false;
 
     showSpinner('Starting Aria — My Health Assistant…');
 
@@ -1147,7 +1126,7 @@ async function handleAgentSetup(e) {
         const pRes = await fetch(`${API}/api/patients`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, preferred_language: autoDetect ? 'English' : language }),
+            body: JSON.stringify({ name, preferred_language: language }),
         });
         const patient = await pRes.json();
         agentState.patientId = patient.id;
@@ -1156,7 +1135,7 @@ async function handleAgentSetup(e) {
         document.getElementById('agent-messages').innerHTML = '';
         document.getElementById('agent-input').value = '';
         document.getElementById('agent-chat-title').textContent = name;
-        document.getElementById('agent-lang-badge').textContent = autoDetect ? 'Auto-detect' : language;
+        document.getElementById('agent-lang-badge').textContent = language;
         document.getElementById('agent-dash-patient-name').textContent = name;
         updateAgentAutoModeUI();
 
@@ -1165,26 +1144,18 @@ async function handleAgentSetup(e) {
 
         requestNotificationPermission();
 
-        if (autoDetect) {
-            const prompt = 'Tell me what you need. I will auto-detect your language.';
-            appendAgentBubble('assistant', prompt);
-            if (agentState.isAutoMode) {
-                agentSpeakThenListen(prompt);
-            }
-        } else {
-            // Start agent session
-            const sRes = await fetch(`${API}/api/agent/start`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ patient_id: patient.id, language, patient_name: name }),
-            });
-            const session = await sRes.json();
-            agentState.sessionId = session.session_id;
+        // Start agent session
+        const sRes = await fetch(`${API}/api/agent/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ patient_id: patient.id, language, patient_name: name }),
+        });
+        const session = await sRes.json();
+        agentState.sessionId = session.session_id;
 
-            appendAgentBubble('assistant', session.greeting);
-            if (agentState.isAutoMode) {
-                agentSpeakThenListen(session.greeting);
-            }
+        appendAgentBubble('assistant', session.greeting);
+        if (agentState.isAutoMode) {
+            agentSpeakThenListen(session.greeting);
         }
 
         // Load dashboard data in background
@@ -1272,27 +1243,6 @@ async function sendAgentMessage(textOverride) {
     document.getElementById('btn-agent-send').disabled = true;
 
     try {
-        if (!agentState.sessionId && agentState.pendingLanguageDetect) {
-            const detected = await detectLanguageFromText(text);
-            agentState.langCode = detected.language_code || 'en';
-            agentState.langName = detected.language || 'English';
-            agentState.dialect = detected.dialect || '';
-            agentState.pendingLanguageDetect = false;
-            document.getElementById('agent-lang-badge').textContent =
-                `${agentState.langName}${agentState.dialect ? ' · ' + agentState.dialect : ''}`;
-
-            const sRes = await fetch(`${API}/api/agent/start`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    patient_id: agentState.patientId,
-                    language: agentState.langName,
-                    patient_name: document.getElementById('agent-chat-title')?.textContent || '',
-                }),
-            });
-            const session = await sRes.json();
-            agentState.sessionId = session.session_id;
-        }
         if (!agentState.sessionId) throw new Error('Agent session not initialized');
 
         // Show Kill Switch
