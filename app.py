@@ -1631,8 +1631,9 @@ def text_to_speech():
     """
     Synthesize speech using OpenAI TTS if OPENAI_API_KEY is present (much more realistic),
     otherwise fallback to Google Cloud Text-to-Speech.
-    Supports two Google auth methods:
-      1. GOOGLE_TTS_API_KEY in .env  → uses REST API (no gcloud login needed)
+    
+    Google Cloud TTS supports two auth methods:
+      1. GOOGLE_TTS_API_KEY in .env → uses REST API
       2. ADC via gcloud auth application-default login → uses Python client library
     """
     data = request.get_json() or {}
@@ -1659,9 +1660,6 @@ def text_to_speech():
             app.logger.warning("OpenAI TTS failed, falling back to Google: %s", e)
 
     # Fallback: Google Cloud TTS
-    if texttospeech is None:
-        return jsonify({"error": "google-cloud-texttospeech package is not installed."}), 500
-
     language_code = _normalize_tts_language(data.get("language_code", "en-SG"))
     # Use higher quality voices if standard is requested
     voice_name = (data.get("voice_name") or "").strip() or None
@@ -1713,12 +1711,10 @@ def text_to_speech():
             )
         except Exception as e:
             app.logger.error("Google TTS (API key) error: %s", e)
-            return jsonify({"error": f"Google TTS failed: {str(e)[:250]}"}), 502
+            # Fall through
 
-    else:
-        # --- Method 2: ADC via gcloud auth application-default login ---
-        if texttospeech is None:
-            return jsonify({"error": "Set GOOGLE_TTS_API_KEY in .env or install google-cloud-texttospeech and run gcloud auth application-default login."}), 500
+    # --- Method 2: ADC via gcloud auth application-default login ---
+    if texttospeech is not None:
         try:
             client = texttospeech.TextToSpeechClient()
             voice_kwargs = {
@@ -1744,7 +1740,32 @@ def text_to_speech():
             )
         except Exception as e:
             app.logger.error("Google TTS (ADC) error: %s", e)
-            return jsonify({"error": f"Google TTS failed: {str(e)[:250]}"}), 502
+            # Fall through
+    else:
+        app.logger.warning("google-cloud-texttospeech package is not installed. Cannot use ADC.")
+
+    # --- Ultimate Fallback: gTTS ---
+    try:
+        from gtts import gTTS
+        import io
+        app.logger.info("Using gTTS fallback.")
+        # gTTS language mapping is simpler, often just the two-letter code
+        gtts_lang = language_code.split('-')[0] if '-' in language_code else language_code
+        # Default to 'en' if specific language not supported by gTTS or not found
+        if gtts_lang not in gTTS.LANGUAGES:
+            gtts_lang = 'en'
+
+        tts_res = gTTS(text=text, lang=gtts_lang, tld="sg")
+        fp = io.BytesIO()
+        tts_res.write_to_fp(fp)
+        return Response(
+            fp.getvalue(),
+            mimetype="audio/mpeg",
+            headers={"Cache-Control": "no-store"}
+        )
+    except Exception as gtts_e:
+        app.logger.error("gTTS fallback failed: %s", gtts_e)
+        return jsonify({"error": "TTS completely failed."}), 502
 
 
 @app.route("/api/voice", methods=["POST"])
@@ -2492,7 +2513,7 @@ with app.app_context():
         db.session.rollback()
 
     db.create_all()
-
+            
     # Add is_urgent to session if DB existed before (SQLite)
     try:
         db.session.execute(db.text("ALTER TABLE session ADD COLUMN is_urgent BOOLEAN DEFAULT 0"))
