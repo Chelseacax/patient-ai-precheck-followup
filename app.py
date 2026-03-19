@@ -1121,7 +1121,7 @@ AGENT_TOOLS = [
         "description": (
             "Perform an atomic browser action on the current HealthHub screen. "
             "Perform an atomic browser action. "
-            "'read_page' returns: interactive_elements (list of {text, x, y} with pixel coordinates) "
+            "'read_page' returns: interactive_elements (list of {{text, x, y}} with pixel coordinates) "
             "and page_text (all visible text on the page via DOM tree walker). "
             "Use 'click' with x,y coordinates from interactive_elements as the PRIMARY method for Yes/No buttons. "
             "Use 'click_text' for navigation links and labelled buttons where text is unique. "
@@ -1563,7 +1563,7 @@ B6b — HealthHub Symptom Screening Form (answer on behalf of patient):
   Step 2: Call `interact_with_screen(action="read_page")`.
           The response contains:
           - page_text: ALL visible text on the page (question, symptom list — e.g. "Fever", "Cough")
-          - interactive_elements: list of {text, x, y} objects — includes Yes and No buttons with coords
+          - interactive_elements: list of {{text, x, y}} objects — includes Yes and No buttons with coords
 
   Step 3: Read page_text to understand the question (e.g. "Do you have any of the following?
           Fever, Cough, Sore throat, Runny nose").
