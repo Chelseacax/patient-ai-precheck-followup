@@ -86,7 +86,7 @@ function navigateTo(view) {
     });
     state.currentView = view;
 
-    if (view === 'doctor') loadSessions();
+    if (view === 'doctor') { loadAppointments(); loadSessions(); }
     if (view === 'checkin') showCheckinStep('checkin-setup');
     if (view === 'agent') { showAgentStep('agent-setup'); _hhConnectWS(); }
 
@@ -821,6 +821,116 @@ function showCheckinTyping() {
 function hideCheckinTyping() {
     const t = document.getElementById('checkin-typing');
     if (t) t.remove();
+}
+
+// ---------------------------------------------------------------------------
+// Doctor Portal — Tab Switching
+// ---------------------------------------------------------------------------
+
+let _doctorActiveTab = 'appointments';
+
+function switchDoctorTab(tab) {
+    _doctorActiveTab = tab;
+    document.getElementById('tab-btn-appointments').classList.toggle('active', tab === 'appointments');
+    document.getElementById('tab-btn-consultations').classList.toggle('active', tab === 'consultations');
+    document.getElementById('tab-appointments').style.display = tab === 'appointments' ? '' : 'none';
+    document.getElementById('tab-consultations').style.display = tab === 'consultations' ? '' : 'none';
+    // Clear main panel
+    document.getElementById('dashboard-main').innerHTML = `
+        <div class="empty-state-large">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="1.5">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+            <h3>Select a Record</h3>
+            <p class="text-muted">Choose an appointment or consultation from the sidebar.</p>
+        </div>`;
+}
+
+function refreshDoctorTab() {
+    if (_doctorActiveTab === 'appointments') loadAppointments();
+    else loadSessions();
+}
+
+// ---------------------------------------------------------------------------
+// Doctor Portal — Appointment List
+// ---------------------------------------------------------------------------
+
+const _apptCache = {};
+
+async function loadAppointments() {
+    try {
+        const res = await fetch(`${API}/api/doctor/appointments`);
+        const appts = await res.json();
+
+        const list = document.getElementById('appointment-list');
+        if (!appts.length) {
+            list.innerHTML = `
+                <div class="empty-state">
+                    <p>No appointments yet.</p>
+                    <p class="text-muted">Appointments booked via Aria appear here.</p>
+                </div>`;
+            return;
+        }
+
+        appts.forEach(a => { _apptCache[a.id] = a; });
+
+        list.innerHTML = appts.map(a => `
+            <div class="session-item" data-appt-id="${escapeHtml(a.id)}" onclick="loadAppointmentDetail('${escapeHtml(a.id)}')">
+                <div class="session-item-head">
+                    <span class="session-item-name">${escapeHtml(a.patient_name)}</span>
+                    <span class="badge ${a.status === 'scheduled' ? 'badge-success' : 'badge-warning'}">${a.status}</span>
+                </div>
+                <div class="session-item-meta">
+                    <span>${escapeHtml(a.specialty)}</span>
+                    <span>${escapeHtml(a.slot_datetime)}</span>
+                </div>
+            </div>`).join('');
+    } catch (err) {
+        console.error('Failed to load appointments', err);
+    }
+}
+
+function loadAppointmentDetail(apptId) {
+    const a = _apptCache[apptId];
+    if (!a) return;
+    document.querySelectorAll('[data-appt-id]').forEach(el => {
+        el.classList.toggle('active', el.dataset.apptId === apptId);
+    });
+
+    const main = document.getElementById('dashboard-main');
+    main.innerHTML = `
+        <div class="detail-section">
+            <div class="detail-section-header">
+                <h3>Patient Information</h3>
+            </div>
+            <div class="detail-meta">
+                <div class="meta-item"><label>Patient Name</label><span>${escapeHtml(a.patient_name)}</span></div>
+                <div class="meta-item"><label>For</label><span>${escapeHtml(a['for'])}</span></div>
+                <div class="meta-item"><label>Status</label><span class="badge ${a.status === 'scheduled' ? 'badge-success' : 'badge-warning'}">${a.status}</span></div>
+                <div class="meta-item"><label>Booked On</label><span>${formatDate(a.created_at)}</span></div>
+            </div>
+        </div>
+        <div class="detail-section">
+            <h3>Appointment Details</h3>
+            <div class="detail-meta">
+                <div class="meta-item"><label>Hospital / Institution</label><span>${escapeHtml(a.doctor_name)}</span></div>
+                <div class="meta-item"><label>Specialty</label><span>${escapeHtml(a.specialty)}</span></div>
+                <div class="meta-item"><label>Date &amp; Time</label><span>${escapeHtml(a.slot_datetime)}</span></div>
+                <div class="meta-item"><label>Reason</label><span>${escapeHtml(a.reason)}</span></div>
+            </div>
+        </div>
+        ${a.symptom_summary ? `
+        <div class="detail-section">
+            <h3>Symptom Summary</h3>
+            <div class="clinician-summary-box">${escapeHtml(a.symptom_summary)}</div>
+        </div>` : `
+        <div class="detail-section">
+            <h3>Symptom Summary</h3>
+            <p class="text-muted" style="font-size:0.875rem">No symptom information recorded for this appointment.</p>
+        </div>`}`;
 }
 
 // ---------------------------------------------------------------------------

@@ -216,6 +216,7 @@ class Appointment(db.Model):
     specialty = db.Column(db.String(80), nullable=False)
     slot_datetime = db.Column(db.String(20), nullable=False)   # "YYYY-MM-DD HH:MM"
     reason = db.Column(db.Text)
+    symptom_summary = db.Column(db.Text)
     status = db.Column(db.String(20), default="scheduled")     # scheduled | cancelled
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -774,7 +775,7 @@ def tool_get_doctor_slots(doctor_id, date=None):
     }
 
 
-def tool_book_appointment(patient_id, doctor_id, slot_datetime, reason, family_member_id=None):
+def tool_book_appointment(patient_id, doctor_id, slot_datetime, reason, family_member_id=None, symptom_summary=None):
     doctor = next((d for d in MOCK_DOCTORS if d["id"] == doctor_id), None)
     if not doctor:
         return {"error": f"Doctor '{doctor_id}' not found"}
@@ -791,6 +792,7 @@ def tool_book_appointment(patient_id, doctor_id, slot_datetime, reason, family_m
         specialty=doctor["specialty"],
         slot_datetime=slot_datetime,
         reason=reason,
+        symptom_summary=symptom_summary,
         status="scheduled",
     )
     db.session.add(appt)
@@ -959,9 +961,10 @@ AGENT_TOOLS = [
                 "doctor_id": {"type": "string", "description": "Doctor ID from get_doctors"},
                 "slot_datetime": {"type": "string", "description": "Exact datetime string YYYY-MM-DD HH:MM from get_doctor_slots"},
                 "reason": {"type": "string", "description": "Reason for appointment"},
+                "symptom_summary": {"type": "string", "description": "Structured symptom summary collected from the patient: chief complaint, duration, severity, and associated symptoms"},
                 "family_member_id": {"type": "string", "description": "Family member ID if booking for a dependant (omit if booking for self)"},
             },
-            "required": ["doctor_id", "slot_datetime", "reason"],
+            "required": ["doctor_id", "slot_datetime", "reason", "symptom_summary"],
         },
     }},
     {"type": "function", "function": {
@@ -1088,8 +1091,12 @@ AGENT_TOOLS = [
                         "Pre-surgery assessment, Specialist referral, Lab test results review"
                     ),
                 },
+                "symptom_summary": {
+                    "type": "string",
+                    "description": "Structured symptom summary collected from the patient before booking: chief complaint, duration, severity, and associated symptoms",
+                },
             },
-            "required": ["institution", "specialty", "date", "time", "reason"],
+            "required": ["institution", "specialty", "date", "time", "reason", "symptom_summary"],
         },
     }},
     {"type": "function", "function": {
@@ -1254,6 +1261,25 @@ def dispatch_tool(name, args, patient_id):
                         f"{desc}. Tell the user what happened and ask them to perform this step manually on the browser screen."
                     ),
                 }
+            # Successful booking — persist to DB for Doctor Portal
+            if raw.get("booked"):
+                try:
+                    slot_dt = args.get("date", "") + " " + args.get("time", "")
+                    appt = Appointment(
+                        patient_id=patient_id,
+                        doctor_id="healthhub",
+                        doctor_name=args.get("institution", "HealthHub"),
+                        specialty=args.get("specialty", ""),
+                        slot_datetime=slot_dt,
+                        reason=args.get("reason", ""),
+                        symptom_summary=args.get("symptom_summary", ""),
+                        status="scheduled",
+                    )
+                    db.session.add(appt)
+                    db.session.commit()
+                except Exception as e:
+                    app.logger.error("Failed to save healthhub appointment to DB: %s", e)
+                    db.session.rollback()
         return raw
 
     if name == "interact_with_screen":
@@ -1285,7 +1311,8 @@ def dispatch_tool(name, args, patient_id):
             args.get("doctor_id", ""), args.get("date")),
         "book_appointment": lambda: tool_book_appointment(
             patient_id, args.get("doctor_id", ""), args.get("slot_datetime", ""),
-            args.get("reason", ""), args.get("family_member_id")),
+            args.get("reason", ""), args.get("family_member_id"),
+            args.get("symptom_summary")),
         "get_appointments": lambda: tool_get_appointments(
             patient_id, args.get("family_member_id")),
         "cancel_appointment": lambda: tool_cancel_appointment(
@@ -1459,6 +1486,20 @@ You must reason about the vertical position of elements before deciding scroll d
 You start on https://eservices.healthhub.sg/.
 - Do NOT wait. Call `read_page` then immediately `click_text` the relevant service tile ("Appointments", "Immunisation", "Medication", "Health Records").
 - After tile click, observe the screen (call `read_page`) and handle the Singpass flow if required.
+
+== SYMPTOM COLLECTION — MANDATORY BEFORE ANY BOOKING ==
+Before calling book_appointment or book_on_healthhub, collect the patient's symptoms by asking EXACTLY ONE question at a time. Wait for the answer before asking the next question. The four questions in order:
+1. "What is your main concern today?" — wait for answer
+2. "How long have you had this?" — wait for answer
+3. "How would you rate it — mild, moderate, or severe?" — wait for answer
+4. "Are there any other symptoms, such as fever, nausea, or pain elsewhere?" — wait for answer
+
+NEVER ask multiple symptom questions in one message. Ask question 1, get answer, ask question 2, get answer, and so on.
+
+Once all four answers are collected, summarize them into symptom_summary, e.g.:
+"Chief complaint: chest pain. Duration: 2 days. Severity: moderate. Associated symptoms: shortness of breath."
+
+Then proceed with the booking tool call. Do NOT book without completing all four questions.
 
 == BOOKING AN APPOINTMENT — STRICT 8-STEP EXECUTION ==
 
@@ -2232,6 +2273,33 @@ def get_session(session_id):
     })
 
 
+@app.route("/api/doctor/appointments", methods=["GET"])
+def doctor_appointments():
+    appts = Appointment.query.order_by(Appointment.created_at.desc()).all()
+    results = []
+    for a in appts:
+        patient = Patient.query.get(a.patient_id)
+        fm_name = ""
+        if a.family_member_id:
+            fm = FamilyMember.query.get(a.family_member_id)
+            if fm:
+                fm_name = fm.name
+        results.append({
+            "id": a.id,
+            "patient_id": a.patient_id,
+            "patient_name": patient.name if patient else "Unknown",
+            "doctor_name": a.doctor_name,
+            "specialty": a.specialty,
+            "slot_datetime": a.slot_datetime,
+            "reason": a.reason or "",
+            "symptom_summary": a.symptom_summary or "",
+            "status": a.status,
+            "for": fm_name or "self",
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        })
+    return jsonify(results)
+
+
 @app.route("/api/sessions", methods=["GET"])
 def list_sessions():
     query = Session.query.order_by(Session.created_at.desc())
@@ -2532,6 +2600,12 @@ with app.app_context():
     # Add is_urgent to session if DB existed before (SQLite)
     try:
         db.session.execute(db.text("ALTER TABLE session ADD COLUMN is_urgent BOOLEAN DEFAULT 0"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+    # Add symptom_summary to appointment if DB existed before
+    try:
+        db.session.execute(db.text("ALTER TABLE appointment ADD COLUMN symptom_summary TEXT"))
         db.session.commit()
     except Exception:
         db.session.rollback()

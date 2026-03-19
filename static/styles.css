@@ -835,6 +835,33 @@ textarea { resize: vertical; }
 }
 .sidebar-header h3 { font-size: var(--font-size-lg); font-weight: 700; }
 
+.doctor-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--color-border-light);
+}
+.doctor-tab-btn {
+    flex: 1;
+    padding: var(--space-3) var(--space-4);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-muted);
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+}
+.doctor-tab-btn.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+}
+.doctor-tab-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+}
+
 .sidebar-filters {
     display: flex;
     flex-wrap: wrap;

@@ -408,8 +408,8 @@
         <div class="dashboard">
             <div class="dashboard-sidebar">
                 <div class="sidebar-header">
-                    <h3>Book Appointments</h3>
-                    <button class="btn btn-sm btn-outline" onclick="loadSessions()" title="Refresh list">
+                    <h3>Patient Records</h3>
+                    <button class="btn btn-sm btn-outline" onclick="refreshDoctorTab()" title="Refresh list">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2">
                             <polyline points="23 4 23 10 17 10" />
@@ -418,29 +418,43 @@
                         Refresh
                     </button>
                 </div>
-                <div class="sidebar-filters">
-                    <label class="sidebar-filter-label">Sort by</label>
-                    <select id="filter-sort" onchange="loadSessions()">
-                        <option value="newest">Newest first</option>
-                        <option value="name-az">Name (A–Z)</option>
-                        <option value="name-za">Name (Z–A)</option>
-                    </select>
-                    <label class="sidebar-filter-label">Status</label>
-                    <select id="filter-status" onchange="loadSessions()">
-                        <option value="">All Status</option>
-                        <option value="completed">Completed</option>
-                        <option value="in_progress">In Progress</option>
-                    </select>
-                    <label class="sidebar-filter-label">Priority</label>
-                    <select id="filter-urgent" onchange="loadSessions()">
-                        <option value="">All</option>
-                        <option value="urgent">Urgent only</option>
-                    </select>
+                <div class="doctor-tabs">
+                    <button id="tab-btn-appointments" class="doctor-tab-btn active" onclick="switchDoctorTab('appointments')">Appointments</button>
+                    <button id="tab-btn-consultations" class="doctor-tab-btn" onclick="switchDoctorTab('consultations')">Consultations</button>
                 </div>
-                <div id="session-list" class="session-list">
-                    <div class="empty-state">
-                        <p>No check-ins yet.</p>
-                        <p class="text-muted">Patient voice check-ins appear here once submitted.</p>
+                <div id="tab-appointments" class="doctor-tab-panel">
+                    <div id="appointment-list" class="session-list">
+                        <div class="empty-state">
+                            <p>No appointments yet.</p>
+                            <p class="text-muted">Appointments booked via Aria appear here.</p>
+                        </div>
+                    </div>
+                </div>
+                <div id="tab-consultations" class="doctor-tab-panel" style="display:none">
+                    <div class="sidebar-filters">
+                        <label class="sidebar-filter-label">Sort by</label>
+                        <select id="filter-sort" onchange="loadSessions()">
+                            <option value="newest">Newest first</option>
+                            <option value="name-az">Name (A–Z)</option>
+                            <option value="name-za">Name (Z–A)</option>
+                        </select>
+                        <label class="sidebar-filter-label">Status</label>
+                        <select id="filter-status" onchange="loadSessions()">
+                            <option value="">All Status</option>
+                            <option value="completed">Completed</option>
+                            <option value="in_progress">In Progress</option>
+                        </select>
+                        <label class="sidebar-filter-label">Priority</label>
+                        <select id="filter-urgent" onchange="loadSessions()">
+                            <option value="">All</option>
+                            <option value="urgent">Urgent only</option>
+                        </select>
+                    </div>
+                    <div id="session-list" class="session-list">
+                        <div class="empty-state">
+                            <p>No check-ins yet.</p>
+                            <p class="text-muted">Patient voice check-ins appear here once submitted.</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -453,9 +467,8 @@
                         <line x1="16" y1="13" x2="8" y2="13" />
                         <line x1="16" y1="17" x2="8" y2="17" />
                     </svg>
-                    <h3>Select a Patient</h3>
-                    <p class="text-muted">Choose a patient check-in from the sidebar to view their clinical summary and
-                        voice conversation transcript.</p>
+                    <h3>Select a Record</h3>
+                    <p class="text-muted">Choose an appointment or consultation from the sidebar to view details.</p>
                 </div>
             </div>
         </div>
