@@ -118,15 +118,51 @@ class Dispatcher:
 
     async def _clear_modals(self):
         """
-        Dismiss any Terms/Privacy/Cookie pop-ups that block interaction on live site.
-        Tries each dismiss text silently.
+        Dismiss any pop-ups, modals, or overlays that block interaction on live site.
+        Tries text-based buttons first, then close icon selectors.
         """
+        # 1. Try text-based dismiss buttons
         for text in MODAL_DISMISS_TEXTS:
             try:
                 btn = self._page.get_by_role("button", name=re.compile(text, re.IGNORECASE))
                 if await btn.first.is_visible():
                     await btn.first.click(timeout=1500)
                     await self._page.wait_for_timeout(400)
+            except Exception:
+                pass
+
+        # 2. Try close-icon buttons (X button, aria-label="Close", title="Close", etc.)
+        close_selectors = [
+            "button[aria-label*='close' i]",
+            "button[aria-label*='dismiss' i]",
+            "button[title*='close' i]",
+            "button[title*='dismiss' i]",
+            "[role='button'][aria-label*='close' i]",
+            ".modal__close",
+            ".modal-close",
+            ".close-btn",
+            ".btn-close",
+            "[data-dismiss='modal']",
+            "[data-bs-dismiss='modal']",
+        ]
+        for sel in close_selectors:
+            try:
+                el = self._page.locator(sel)
+                if await el.first.is_visible(timeout=800):
+                    await el.first.click(timeout=1500)
+                    await self._page.wait_for_timeout(400)
+                    break
+            except Exception:
+                pass
+
+        # 3. Try buttons/elements whose text is ×, ✕, or X (close icons)
+        for symbol in ["×", "✕", "✗", "X", "x"]:
+            try:
+                btn = self._page.get_by_role("button", name=re.compile(rf"^{re.escape(symbol)}$"))
+                if await btn.first.is_visible(timeout=500):
+                    await btn.first.click(timeout=1500)
+                    await self._page.wait_for_timeout(400)
+                    break
             except Exception:
                 pass
 

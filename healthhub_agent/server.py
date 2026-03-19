@@ -164,34 +164,105 @@ async def do_browser_action(req: BrowserActionRequest):
                     except Exception:
                         continue
 
-            # 4. Fallback: get_by_text (partial match)
+            # 4. Try label elements (for radio/checkbox inputs)
+            if not clicked and req.text:
+                loc = page.locator(f"label").filter(has_text=_re.compile(req.text, _re.IGNORECASE))
+                try:
+                    if await loc.first.is_visible(timeout=1500):
+                        await loc.first.click(timeout=6000)
+                        clicked = True
+                except Exception:
+                    pass
+
+            # 5. Try any clickable element with matching text (divs, spans, li with onclick)
+            if not clicked and req.text:
+                for sel in [
+                    f"[role='radio']", f"[role='checkbox']",
+                    f"input[type='radio']", f"input[type='checkbox']",
+                ]:
+                    try:
+                        els = page.locator(sel)
+                        count = await els.count()
+                        for i in range(count):
+                            el = els.nth(i)
+                            if not await el.is_visible(timeout=500):
+                                continue
+                            # Check associated label
+                            label_text = ""
+                            try:
+                                el_id = await el.get_attribute("id")
+                                if el_id:
+                                    lbl = page.locator(f"label[for='{el_id}']")
+                                    label_text = (await lbl.inner_text()).strip()
+                            except Exception:
+                                pass
+                            if _re.search(req.text, label_text, _re.IGNORECASE):
+                                await el.click(timeout=6000)
+                                clicked = True
+                                break
+                        if clicked:
+                            break
+                    except Exception:
+                        continue
+
+            # 6. Fallback: get_by_text (partial match on any element)
             if not clicked and req.text:
                 loc = page.get_by_text(_re.compile(req.text, _re.IGNORECASE))
-                if await loc.first.is_visible(timeout=2000):
-                    await loc.first.click(timeout=6000)
-                    clicked = True
+                try:
+                    if await loc.first.is_visible(timeout=2000):
+                        await loc.first.click(timeout=6000)
+                        clicked = True
+                except Exception:
+                    pass
 
             if not clicked:
                 return {"error": f"Could not find element matching text: '{req.text}'"}
 
         elif req.action == "read_page":
-            # Return the current URL + visible text links/buttons for agent context
             page = dispatcher._page
             url   = page.url
             title = await page.title()
-            # Grab visible interactive text
-            handles = await page.query_selector_all("a, button, [role='button'], [role='link'], [role='menuitem']")
+
+            # 1. Interactive elements (buttons, links, roles)
+            handles = await page.query_selector_all(
+                "a, button, [role='button'], [role='link'], [role='menuitem'], "
+                "[role='radio'], [role='checkbox'], label"
+            )
             elements = []
-            for el in handles[:60]:  # cap at 60 to avoid huge payloads
+            seen = set()
+            for el in handles[:80]:
                 try:
-                    visible = await el.is_visible()
-                    if visible:
-                        t = (await el.inner_text()).strip().replace("\n", " ")
-                        if t:
-                            elements.append(t)
+                    if not await el.is_visible():
+                        continue
+                    t = (await el.inner_text()).strip().replace("\n", " ")
+                    if t and t not in seen:
+                        seen.add(t)
+                        elements.append(t)
                 except Exception:
                     pass
-            return {"url": url, "title": title, "interactive_elements": elements}
+
+            # 2. Visible question/heading text (so agent knows what question is being asked)
+            question_text = []
+            q_handles = await page.query_selector_all(
+                "h1, h2, h3, h4, h5, p, span, li, [role='dialog'] *, [role='alertdialog'] *"
+            )
+            for el in q_handles[:40]:
+                try:
+                    if not await el.is_visible():
+                        continue
+                    t = (await el.inner_text()).strip().replace("\n", " ")
+                    if t and len(t) > 5 and t not in seen:
+                        seen.add(t)
+                        question_text.append(t)
+                except Exception:
+                    pass
+
+            return {
+                "url": url,
+                "title": title,
+                "interactive_elements": elements,
+                "page_text": question_text[:30],
+            }
 
         elif req.action == "type":
             await dispatcher._page.keyboard.type(req.text)

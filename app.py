@@ -1358,7 +1358,18 @@ def run_agent(messages, patient_id, max_iter=12):
     scroll_retries = 0  # tracks automatic scroll attempts after not-found errors
     MAX_SCROLL_RETRIES = 4
 
-    def _inject_screenshot(msg_list):
+    # Track whether the browser has been actively used this session
+    _browser_tools = {"view_healthhub", "interact_with_screen", "book_on_healthhub"}
+    _browser_active = any(
+        m.get("role") == "assistant" and
+        any(tc.get("function", {}).get("name", "") in _browser_tools
+            for tc in (m.get("tool_calls") or []))
+        for m in msgs
+    )
+
+    def _inject_screenshot(msg_list, force=False):
+        if not force and not _browser_active:
+            return  # Skip screenshot for non-browser sessions
         try:
             state = _call_bridge("/api/browser/state", method="GET", timeout=5)
             if isinstance(state, dict) and state.get("image"):
@@ -1366,14 +1377,13 @@ def run_agent(messages, patient_id, max_iter=12):
                     {"type": "text", "text": "Screenshot of current HealthHub screen:"},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{state['image']}"}}
                 ]
-                # If Singpass login is detected, append explicit context
                 if state.get("on_singpass_page"):
                     content.append({"type": "text", "text": "[SYSTEM: The browser is currently showing a Singpass login page with a QR code. Guide the user to open their Singpass app and scan the QR code on screen. Wait for them to complete login before proceeding.]"})
                 msg_list.append({"role": "user", "content": content})
         except Exception:
             pass
 
-    _inject_screenshot(msgs)
+    _inject_screenshot(msgs)  # only runs if browser was used in prior history
 
     global _GLOBAL_STOP_FLAG
     _GLOBAL_STOP_FLAG = False
@@ -1420,7 +1430,10 @@ def run_agent(messages, patient_id, max_iter=12):
                                      "the updated list of visible elements before attempting "
                                      "to click. Do NOT ask the user to do anything yet."
                                  )})
-            _inject_screenshot(msgs)
+            # Only inject screenshot after browser tool calls, not DB calls
+            used_browser = any(tc.function.name in _browser_tools for tc in msg.tool_calls)
+            if used_browser:
+                _inject_screenshot(msgs, force=True)
             continue
 
         text = msg.content or ""
@@ -1438,7 +1451,8 @@ def run_agent(messages, patient_id, max_iter=12):
             if clean_text:
                 msgs.append({"role": "assistant", "content": clean_text})
             msgs.append({"role": "user", "content": f"Tool result for {tool_name}: {result_str}"})
-            _inject_screenshot(msgs)
+            if tool_name in _browser_tools:
+                _inject_screenshot(msgs, force=True)
             continue
 
         # Detect placeholder responses: model said "one moment / let me check" but called no tool
@@ -1466,6 +1480,7 @@ CRITICAL RULES:
 - Call tools IMMEDIATELY. Never say "Give me a moment" without calling a tool first.
 - Do NOT expose JSON, technical errors, or internal details to the user.
 - OBSERVATION LAYER: After EVERY click_text or click, immediately call `interact_with_screen(action="read_page")` to observe the updated screen before deciding the next action or speaking to the user.
+- NEVER ask the user to close a pop-up, click an X, or dismiss anything manually. Always handle popups yourself using `interact_with_screen(action="clear_modals")` first, then retry your action. Only tell the user about a popup if clear_modals has been called at least 3 times and it still blocks.
 
 == GOLDEN RULE: TRY BEFORE YOU ASK ==
 Never tell the user "I can't find X" unless ALL four checks are done:
@@ -1536,30 +1551,58 @@ B6 — Location Selection (read from page):
   If not visible, scroll the dropdown and `read_page` again (up to 5 times).
   If user hasn't specified a location, list the options and ask.
 
-B7 — Continue & Date:
-  Click 'Continue' using `click_text`. Call `read_page`.
-  Read the visible calendar. Click the user's preferred date using `click_text`.
-  If user has not given a date, show available dates and ask.
+B6b — HealthHub Symptom Screening Form (answer on behalf of patient):
+  After location is selected, HealthHub may show a symptom screening form with Yes/No questions.
+  You MUST handle this completely automatically without asking the patient anything.
 
-B8 — Time Slot:
-  Call `read_page` to list visible timeslots.
-  If the preferred time is not visible, click 'load more time slots' and `read_page` again. Repeat until found or exhausted.
+  LOOP — repeat until no more symptom questions remain:
+
+  Step 1: Call `interact_with_screen(action="clear_modals")` to dismiss any popup overlays.
+  Step 2: Call `interact_with_screen(action="read_page")`.
+          The response contains two fields:
+          - interactive_elements: buttons, labels, Yes/No options visible on screen
+          - page_text: visible question and heading text (read this to understand what is being asked)
+
+  Step 3: Read page_text to find the symptom question being asked.
+          Cross-reference with the patient's symptom_summary from Phase A:
+          • If the question matches a symptom the patient mentioned → click_text(text="Yes")
+          • Otherwise → click_text(text="No")
+          After clicking, call `read_page` again to see what changed.
+
+  Step 4: If clicking Yes/No fails (element not found):
+          a. Call `interact_with_screen(action="press", key="Escape")` to dismiss any overlay.
+          b. Call `clear_modals` again.
+          c. Scroll DOWN 300px, call `read_page`, try clicking again.
+          d. If still failing after all attempts, try clicking the exact label text instead of "Yes"/"No".
+
+  Step 5: After each successful click, call `read_page`:
+          - If a new question appears → repeat from Step 1.
+          - If 'Next', 'Continue', 'Confirm' appears and no more Yes/No → click it and exit loop.
+          - If the same elements appear unchanged after 2 reads → press Escape, clear_modals, scroll.
+
+  NEVER ask the patient to click anything themselves.
+  NEVER give up after one failed attempt — try Escape, clear_modals, and scroll first.
+
+B7 — Continue to Calendar & Date Selection:
+  Click 'Continue' (or 'Next') using `click_text`. Call `read_page` to observe the calendar screen.
+  Read the visible calendar dates. If user has not given a date, show available dates and ask.
+  Click the user's preferred date using `click_text`. Call `read_page` to confirm the date was selected.
+  If a 'Next' or 'Continue' button appears after selecting the date, click it and call `read_page`.
+
+B8 — Time Slot Selection & Continue:
+  Call `read_page` to list all visible timeslots.
+  If the preferred time is not visible, click 'load more time slots' (or equivalent) and `read_page` again. Repeat until found or exhausted.
   If not found, tell the user which slots ARE available and let them choose.
-  Click the chosen slot using `click_text`.
+  Click the chosen timeslot using `click_text`. Call `read_page` to confirm it is selected.
+  CRITICAL: After selecting the time, always look for and click 'Next', 'Continue', or 'Proceed' button.
+  Call `read_page` again to observe what screen appeared after clicking Next.
 
 B9 — Confirm:
   Call `read_page` to verify the booking summary on screen.
   Tell the user: "I can see your booking summary: [details from page]. Shall I confirm?"
-  After explicit approval, click the Confirm/Submit button using `click_text`.
+  After explicit approval, click the Confirm/Submit/Book button using `click_text`.
+  Call `read_page` to verify booking was submitted successfully and report back to the user.
 
-== SMART NO-BUTTON SEARCH (Screening / Symptom Forms) ==
-When filling out a symptom screening form (e.g. polyclinic pre-consultation questions):
-1. VISUAL ANCHOR: After the symptom question text is visible, treat it as an anchor. The answer buttons ("Yes", "No", "Confirm") are always directly adjacent — below or to the right of that text.
-2. Try `click_text(text="No")` or `click_text(text="Confirm")` immediately after observing the symptom text via `read_page`.
-3. If not found: micro-scroll DOWN 200px (`action="scroll", direction="down", distance=200`) and try again.
-4. If still not found: micro-scroll UP 200px (`action="scroll", direction="up", distance=200`) to check if it is above the current viewport.
-5. Only after both 200px passes fail: scroll 600px down and re-read.
-6. Never ask the user to click "No" themselves — exhaust all bidirectional micro-scrolls first.
 
 == SINGPASS LOGIN ==
 If you see a "Login via Singpass", "Log in", "Sign in", or "Continue with Singpass" button:
