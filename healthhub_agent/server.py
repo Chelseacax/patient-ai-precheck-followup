@@ -129,8 +129,22 @@ async def do_browser_action(req: BrowserActionRequest):
         return {"error": "Browser not ready"}
     try:
         if req.action == "click":
-            # Raw pixel click
-            await dispatcher._page.mouse.click(req.x, req.y)
+            # Use JS elementFromPoint().click() — this triggers React synthetic events
+            # which raw mouse.click() does not reliably do on SPA pages.
+            page = dispatcher._page
+            clicked = await page.evaluate(f"""() => {{
+                const el = document.elementFromPoint({req.x}, {req.y});
+                if (!el) return false;
+                el.click();
+                return true;
+            }}""")
+            if not clicked:
+                # Fallback to raw mouse click if JS found nothing at those coords
+                await page.mouse.click(req.x, req.y)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=3000)
+            except Exception:
+                pass
 
         elif req.action == "click_text":
             # ARIA / text-based click — much more reliable on live sites
@@ -145,17 +159,34 @@ async def do_browser_action(req: BrowserActionRequest):
                     await loc.first.click(timeout=6000)
                     clicked = True
 
-            # 2. Try by ARIA role + name
+            # 2. Try by ARIA role + name — EXACT match first to avoid false matches.
+            #    e.g. text="No" with partial regex also matches "Sign up now" (contains "no").
+            #    If exact match finds nothing, fall back to partial for longer button labels.
             if not clicked and req.role and req.text:
-                loc = page.get_by_role(req.role, name=_re.compile(req.text, _re.IGNORECASE))
-                if await loc.first.is_visible():
-                    await loc.first.click(timeout=6000)
-                    clicked = True
+                exact_pat = _re.compile(f"^{_re.escape(req.text)}$", _re.IGNORECASE)
+                loc = page.get_by_role(req.role, name=exact_pat)
+                try:
+                    if await loc.first.is_visible(timeout=1500):
+                        await loc.first.click(timeout=6000)
+                        clicked = True
+                except Exception:
+                    pass
+                if not clicked:
+                    # Partial match fallback for buttons with longer accessible names
+                    partial_pat = _re.compile(_re.escape(req.text), _re.IGNORECASE)
+                    loc = page.get_by_role(req.role, name=partial_pat)
+                    try:
+                        if await loc.first.is_visible(timeout=1500):
+                            await loc.first.click(timeout=6000)
+                            clicked = True
+                    except Exception:
+                        pass
 
-            # 3. Try any role matching the text label
+            # 3. Try any role matching the text label — exact match first, then partial
             if not clicked and req.text:
                 for role in ["button", "link", "menuitem", "option", "tab"]:
-                    loc = page.get_by_role(role, name=_re.compile(req.text, _re.IGNORECASE))
+                    exact_pat = _re.compile(f"^{_re.escape(req.text)}$", _re.IGNORECASE)
+                    loc = page.get_by_role(role, name=exact_pat)
                     try:
                         if await loc.first.is_visible(timeout=1500):
                             await loc.first.click(timeout=6000)
@@ -163,22 +194,44 @@ async def do_browser_action(req: BrowserActionRequest):
                             break
                     except Exception:
                         continue
+                if not clicked:
+                    for role in ["button", "link", "menuitem", "option", "tab"]:
+                        partial_pat = _re.compile(_re.escape(req.text), _re.IGNORECASE)
+                        loc = page.get_by_role(role, name=partial_pat)
+                        try:
+                            if await loc.first.is_visible(timeout=1500):
+                                await loc.first.click(timeout=6000)
+                                clicked = True
+                                break
+                        except Exception:
+                            continue
 
-            # 4. Try label elements (for radio/checkbox inputs)
+            # 4. Try label elements (for radio/checkbox inputs) — exact match first
             if not clicked and req.text:
-                loc = page.locator(f"label").filter(has_text=_re.compile(req.text, _re.IGNORECASE))
+                exact_pat = _re.compile(f"^{_re.escape(req.text)}$", _re.IGNORECASE)
+                loc = page.locator("label").filter(has_text=exact_pat)
                 try:
                     if await loc.first.is_visible(timeout=1500):
                         await loc.first.click(timeout=6000)
                         clicked = True
                 except Exception:
                     pass
+                if not clicked:
+                    # Partial fallback for labels with longer text
+                    partial_pat = _re.compile(_re.escape(req.text), _re.IGNORECASE)
+                    loc = page.locator("label").filter(has_text=partial_pat)
+                    try:
+                        if await loc.first.is_visible(timeout=1500):
+                            await loc.first.click(timeout=6000)
+                            clicked = True
+                    except Exception:
+                        pass
 
-            # 5. Try any clickable element with matching text (divs, spans, li with onclick)
+            # 5. Try radio/checkbox inputs by associated label — exact match only
             if not clicked and req.text:
                 for sel in [
-                    f"[role='radio']", f"[role='checkbox']",
-                    f"input[type='radio']", f"input[type='checkbox']",
+                    "[role='radio']", "[role='checkbox']",
+                    "input[type='radio']", "input[type='checkbox']",
                 ]:
                     try:
                         els = page.locator(sel)
@@ -187,7 +240,8 @@ async def do_browser_action(req: BrowserActionRequest):
                             el = els.nth(i)
                             if not await el.is_visible(timeout=500):
                                 continue
-                            # Check associated label
+                            # Check associated label — use EXACT match to avoid
+                            # "No" matching "No additional symptoms", etc.
                             label_text = ""
                             try:
                                 el_id = await el.get_attribute("id")
@@ -196,7 +250,7 @@ async def do_browser_action(req: BrowserActionRequest):
                                     label_text = (await lbl.inner_text()).strip()
                             except Exception:
                                 pass
-                            if _re.search(req.text, label_text, _re.IGNORECASE):
+                            if _re.fullmatch(_re.escape(req.text), label_text, _re.IGNORECASE):
                                 await el.click(timeout=6000)
                                 clicked = True
                                 break
@@ -205,15 +259,25 @@ async def do_browser_action(req: BrowserActionRequest):
                     except Exception:
                         continue
 
-            # 6. Fallback: get_by_text (partial match on any element)
+            # 6. Fallback: get_by_text — exact match first, then partial
             if not clicked and req.text:
-                loc = page.get_by_text(_re.compile(req.text, _re.IGNORECASE))
+                # Exact text match (Playwright exact=True requires full string equality)
+                loc = page.get_by_text(req.text, exact=True)
                 try:
                     if await loc.first.is_visible(timeout=2000):
                         await loc.first.click(timeout=6000)
                         clicked = True
                 except Exception:
                     pass
+                if not clicked:
+                    # Partial fallback (last resort)
+                    loc = page.get_by_text(_re.compile(_re.escape(req.text), _re.IGNORECASE))
+                    try:
+                        if await loc.first.is_visible(timeout=2000):
+                            await loc.first.click(timeout=6000)
+                            clicked = True
+                    except Exception:
+                        pass
 
             if not clicked:
                 return {"error": f"Could not find element matching text: '{req.text}'"}
@@ -230,23 +294,48 @@ async def do_browser_action(req: BrowserActionRequest):
             )
             elements = []
             seen = set()
-            for el in handles[:80]:
+
+            async def _try_add_el(el):
                 try:
                     if not await el.is_visible():
-                        continue
+                        return
+                    # Skip header/footer chrome — prevents "Sign up now", "Log out",
+                    # newsletter links etc. from appearing in interactive_elements and
+                    # being accidentally clicked by the LLM.
+                    in_chrome = await el.evaluate(
+                        "el => !!el.closest('header, footer, [role=\"banner\"], [role=\"contentinfo\"]')"
+                    )
+                    if in_chrome:
+                        return
                     t = (await el.inner_text()).strip().replace("\n", " ")
-                    if not t:
-                        continue
-                    if t not in seen:
-                        seen.add(t)
-                        box = await el.bounding_box()
-                        entry = {"text": t}
-                        if box:
-                            entry["x"] = int(box["x"] + box["width"] / 2)
-                            entry["y"] = int(box["y"] + box["height"] / 2)
-                        elements.append(entry)
+                    if not t or t in seen:
+                        return
+                    seen.add(t)
+                    box = await el.bounding_box()
+                    entry = {"text": t}
+                    if box:
+                        entry["x"] = int(box["x"] + box["width"] / 2)
+                        entry["y"] = int(box["y"] + box["height"] / 2)
+                    elements.append(entry)
                 except Exception:
                     pass
+
+            # Priority pass: always include Yes/No/Confirm buttons regardless of DOM position
+            for priority_text in ["Yes", "No", "Confirm", "Next", "Continue", "Submit", "Back"]:
+                try:
+                    import re as _re2
+                    loc = page.get_by_role("button", name=_re2.compile(f"^{priority_text}$", _re2.IGNORECASE))
+                    count = await loc.count()
+                    for i in range(count):
+                        await _try_add_el(await loc.nth(i).element_handle())
+                except Exception:
+                    pass
+
+            # General pass: scan up to first 80 visible elements in DOM order
+            for el in handles:
+                if len(elements) >= 80:
+                    break
+                await _try_add_el(el)
 
             # 2. All visible text via JS tree walker — catches div/p/span/li including
             #    short words like "Fever", "Cough" (no length filter) and question text
@@ -283,6 +372,10 @@ async def do_browser_action(req: BrowserActionRequest):
                 "page_text": page_text,
             }
 
+        elif req.action == "js_eval":
+            result = await dispatcher._page.evaluate(req.text)
+            return {"result": result}
+
         elif req.action == "type":
             await dispatcher._page.keyboard.type(req.text)
         elif req.action == "press":
@@ -309,7 +402,42 @@ async def do_browser_action(req: BrowserActionRequest):
 
             await asyncio.sleep(0.6)  # let lazy-loaded content render
             return {"scrolled": delta, "direction": req.direction}
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(1.2)  # extra wait for React/SPA state updates to settle
+
+        # Auto-clear any popup/modal that appeared as a side-effect of the action,
+        # then re-fire the original click so the underlying form still advances.
+        # The HealthHub newsletter ant-modal (z=1000) appears after triage Yes/No
+        # clicks and absorbs them — dismissing it alone is not enough, we must retry.
+        if req.action in ("click", "click_text"):
+            popup_present = await dispatcher._page.evaluate("""() => {
+                const wrap = document.querySelector('.ant-modal-wrap');
+                return wrap && window.getComputedStyle(wrap).display !== 'none';
+            }""")
+            if popup_present:
+                await dispatcher._clear_modals()
+                await asyncio.sleep(0.8)
+                # Retry the original click now that the popup is gone
+                try:
+                    import re as _re_retry
+                    page = dispatcher._page
+                    if req.action == "click_text" and req.text:
+                        for role in ["button", "link"]:
+                            loc = page.get_by_role(role, name=_re_retry.compile(req.text, _re_retry.IGNORECASE))
+                            try:
+                                if await loc.first.is_visible(timeout=1500):
+                                    await loc.first.click(timeout=4000)
+                                    break
+                            except Exception:
+                                continue
+                    elif req.action == "click":
+                        await page.evaluate(f"""() => {{
+                            const el = document.elementFromPoint({req.x}, {req.y});
+                            if (el) el.click();
+                        }}""")
+                    await asyncio.sleep(1.0)
+                except Exception:
+                    pass
+
         return {"success": True}
     except Exception as e:
         return {"error": str(e)}

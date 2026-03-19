@@ -125,41 +125,54 @@ class Dispatcher:
 
         # 1. JS-based: find any visible modal/overlay and click its close button.
         #    Handles SVG icon buttons (no text) like HealthHub's newsletter popup.
-        #    Sorts by z-index descending so the topmost overlay is targeted first,
-        #    avoiding accidental clicks on the fixed header or other navbars.
+        #    Sorts by z-index descending so the topmost overlay is targeted first.
+        #    Excludes <header>/<footer> chrome so we never accidentally dismiss the nav.
         try:
             clicked = await page.evaluate("""() => {
-                // Pass 1: explicit close/dismiss semantics
+                // Pass 1: Ant Design modal close button (ant-modal-close) — most specific.
+                //   HealthHub uses antd; the newsletter popup IS an ant-modal with z=1000.
+                const antClose = document.querySelector('.ant-modal-close');
+                if (antClose && antClose.offsetParent !== null) {
+                    antClose.click(); return true;
+                }
+
+                // Pass 2: explicit close/dismiss semantics (excluding site header/footer)
                 const closeSelectors = [
                     'button[aria-label*="close" i]', 'button[aria-label*="dismiss" i]',
                     'button[title*="close" i]', '[data-dismiss]', '[data-bs-dismiss]',
                     '.modal-close', '.close-btn', '.btn-close', '.modal__close',
+                    'button[aria-label*="cancel" i]',
                 ];
                 for (const sel of closeSelectors) {
                     const el = document.querySelector(sel);
-                    if (el && el.offsetParent !== null) { el.click(); return true; }
+                    if (el && !el.closest('header, footer') && el.offsetParent !== null) {
+                        el.click(); return true;
+                    }
                 }
 
-                // Pass 2: find all fixed/absolute overlays, sort by z-index descending,
-                // require modal-like dimensions (> 200px wide, > 100px tall) to skip
-                // narrow navbars and notification strips
-                const vw = window.innerWidth, vh = window.innerHeight;
+                // Pass 3: find visible fixed/absolute overlays (z > 20) that look like
+                // dialogs/popups. Exclude the site header (in <header>) and the small
+                // "Top" scroll button (height < 80px).  The ant-modal-wrap starts at
+                // rect.top = 0 (full-screen overlay) so we deliberately do NOT filter
+                // by rect.top here — we use !el.closest('header') instead.
                 const overlays = [...document.querySelectorAll('*')]
                     .map(el => ({ el, s: window.getComputedStyle(el) }))
                     .filter(({ el, s }) => {
                         const z = parseInt(s.zIndex) || 0;
                         return (s.position === 'fixed' || s.position === 'absolute')
-                            && z > 100
-                            && s.display !== 'none' && s.visibility !== 'hidden'
-                            && el.offsetWidth > 200 && el.offsetHeight > 100;
+                            && z > 20
+                            && s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0'
+                            && el.offsetWidth > 100 && el.offsetHeight > 80
+                            && !el.closest('header, footer');
                     })
                     .sort((a, b) => (parseInt(b.s.zIndex) || 0) - (parseInt(a.s.zIndex) || 0));
 
                 for (const { el } of overlays) {
-                    // Try a button with close-ish text first, then any button
+                    // Try close-semantics button first, then any button inside the overlay
                     const closeBtn = el.querySelector(
-                        'button[aria-label*="close" i], button[aria-label*="dismiss" i], ' +
-                        'button[title*="close" i]'
+                        '.ant-modal-close, button[aria-label*="close" i], ' +
+                        'button[aria-label*="dismiss" i], button[title*="close" i], ' +
+                        'button[aria-label*="cancel" i]'
                     );
                     const anyBtn = el.querySelector('button');
                     const btn = closeBtn || anyBtn;
@@ -173,13 +186,23 @@ class Dispatcher:
         except Exception:
             pass
 
-        # 2. Try text-based dismiss buttons
+        # 2. Try text-based dismiss buttons (skip ones inside header/footer)
         for text in MODAL_DISMISS_TEXTS:
             try:
                 btn = page.get_by_role("button", name=re.compile(text, re.IGNORECASE))
-                if await btn.first.is_visible():
-                    await btn.first.click(timeout=1500)
+                count = await btn.count()
+                for i in range(count):
+                    b = btn.nth(i)
+                    if not await b.is_visible(timeout=500):
+                        continue
+                    in_chrome = await b.evaluate(
+                        "el => !!el.closest('header, footer')"
+                    )
+                    if in_chrome:
+                        continue
+                    await b.click(timeout=1500)
                     await page.wait_for_timeout(400)
+                    break
             except Exception:
                 pass
 
@@ -193,9 +216,11 @@ class Dispatcher:
             try:
                 el = page.locator(sel)
                 if await el.first.is_visible(timeout=800):
-                    await el.first.click(timeout=1500)
-                    await page.wait_for_timeout(400)
-                    break
+                    in_chrome = await el.first.evaluate("el => !!el.closest('header, footer')")
+                    if not in_chrome:
+                        await el.first.click(timeout=1500)
+                        await page.wait_for_timeout(400)
+                        break
             except Exception:
                 pass
 
@@ -204,11 +229,20 @@ class Dispatcher:
             try:
                 btn = page.get_by_role("button", name=re.compile(rf"^{re.escape(symbol)}$"))
                 if await btn.first.is_visible(timeout=500):
-                    await btn.first.click(timeout=1500)
-                    await page.wait_for_timeout(400)
-                    break
+                    in_chrome = await btn.first.evaluate("el => !!el.closest('header, footer')")
+                    if not in_chrome:
+                        await btn.first.click(timeout=1500)
+                        await page.wait_for_timeout(400)
+                        break
             except Exception:
                 pass
+
+        # 5. Escape key — reliable fallback for any modal that listens to keyboard
+        try:
+            await page.keyboard.press("Escape")
+            await page.wait_for_timeout(400)
+        except Exception:
+            pass
 
     async def _try_click(self, locator_fn, description: str, timeout=6000) -> dict:
         """
