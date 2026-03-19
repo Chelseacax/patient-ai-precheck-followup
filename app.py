@@ -1120,11 +1120,13 @@ AGENT_TOOLS = [
         "name": "interact_with_screen",
         "description": (
             "Perform an atomic browser action on the current HealthHub screen. "
-            "Prefer 'click_text' over 'click' — it finds elements by their visible label/text and is reliable on the live site. "
-            "Use 'read_page' to list all visible interactive elements (links, buttons) and the current URL before deciding what to click. "
-            "Use 'scroll' to scroll the page or a specific element down to reveal more content. "
-            "OBSERVATION LAYER: after every 'click_text' or 'click', you MUST immediately call 'read_page' again to observe any UI changes (e.g. dropdown options that appeared, new fields that loaded). Parse those options before speaking to the user. "
-            "Use 'click' (x, y) ONLY as a last resort when no text label is available."
+            "Perform an atomic browser action. "
+            "'read_page' returns: interactive_elements (list of {text, x, y} with pixel coordinates) "
+            "and page_text (all visible text on the page via DOM tree walker). "
+            "Use 'click' with x,y coordinates from interactive_elements as the PRIMARY method for Yes/No buttons. "
+            "Use 'click_text' for navigation links and labelled buttons where text is unique. "
+            "OBSERVATION LAYER: after every click, immediately call 'read_page' to observe UI changes before deciding next step. "
+            "'clear_modals' uses JavaScript to find and close any popup/overlay including SVG-icon close buttons."
         ),
         "parameters": {
             "type": "object",
@@ -1552,36 +1554,34 @@ B6 — Location Selection (read from page):
   If user hasn't specified a location, list the options and ask.
 
 B6b — HealthHub Symptom Screening Form (answer on behalf of patient):
-  After location is selected, HealthHub may show a symptom screening form with Yes/No questions.
+  After location is selected, HealthHub may show a symptom screening form.
   You MUST handle this completely automatically without asking the patient anything.
 
-  LOOP — repeat until no more symptom questions remain:
+  Step 1: Call `interact_with_screen(action="clear_modals")` — this automatically closes any
+          newsletter or overlay popup that is blocking the form.
 
-  Step 1: Call `interact_with_screen(action="clear_modals")` to dismiss any popup overlays.
   Step 2: Call `interact_with_screen(action="read_page")`.
-          The response contains two fields:
-          - interactive_elements: buttons, labels, Yes/No options visible on screen
-          - page_text: visible question and heading text (read this to understand what is being asked)
+          The response contains:
+          - page_text: ALL visible text on the page (question, symptom list — e.g. "Fever", "Cough")
+          - interactive_elements: list of {text, x, y} objects — includes Yes and No buttons with coords
 
-  Step 3: Read page_text to find the symptom question being asked.
-          Cross-reference with the patient's symptom_summary from Phase A:
-          • If the question matches a symptom the patient mentioned → click_text(text="Yes")
-          • Otherwise → click_text(text="No")
-          After clicking, call `read_page` again to see what changed.
+  Step 3: Read page_text to understand the question (e.g. "Do you have any of the following?
+          Fever, Cough, Sore throat, Runny nose").
+          Cross-reference the listed symptoms with the patient's symptom_summary from Phase A:
+          • If the patient has ANY of the listed symptoms → click Yes
+          • If the patient has NONE of the listed symptoms → click No
 
-  Step 4: If clicking Yes/No fails (element not found):
-          a. Call `interact_with_screen(action="press", key="Escape")` to dismiss any overlay.
-          b. Call `clear_modals` again.
-          c. Scroll DOWN 300px, call `read_page`, try clicking again.
-          d. If still failing after all attempts, try clicking the exact label text instead of "Yes"/"No".
+  Step 4: Click using COORDINATES from interactive_elements (most reliable):
+          Find the "Yes" or "No" entry in interactive_elements. It will have x and y fields.
+          Call `interact_with_screen(action="click", x=<x>, y=<y>)` with those exact coordinates.
+          Do NOT use click_text for Yes/No — use coordinate click instead.
 
-  Step 5: After each successful click, call `read_page`:
+  Step 5: Call `read_page` after clicking to see what changed.
           - If a new question appears → repeat from Step 1.
-          - If 'Next', 'Continue', 'Confirm' appears and no more Yes/No → click it and exit loop.
-          - If the same elements appear unchanged after 2 reads → press Escape, clear_modals, scroll.
+          - If 'Next', 'Continue', or 'Confirm' appears → click it (by coordinates or click_text).
+          - If page_text is empty or same as before → call clear_modals, then read_page again.
 
-  NEVER ask the patient to click anything themselves.
-  NEVER give up after one failed attempt — try Escape, clear_modals, and scroll first.
+  NEVER ask the patient to click anything. NEVER give up — try clear_modals + coordinate click.
 
 B7 — Continue to Calendar & Date Selection:
   Click 'Continue' (or 'Next') using `click_text`. Call `read_page` to observe the calendar screen.

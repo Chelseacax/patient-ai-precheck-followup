@@ -223,10 +223,10 @@ async def do_browser_action(req: BrowserActionRequest):
             url   = page.url
             title = await page.title()
 
-            # 1. Interactive elements (buttons, links, roles)
+            # 1. Interactive elements with centre coordinates (so LLM can use action=click x,y)
             handles = await page.query_selector_all(
                 "a, button, [role='button'], [role='link'], [role='menuitem'], "
-                "[role='radio'], [role='checkbox'], label"
+                "[role='radio'], [role='checkbox'], label, input[type='submit']"
             )
             elements = []
             seen = set()
@@ -235,33 +235,52 @@ async def do_browser_action(req: BrowserActionRequest):
                     if not await el.is_visible():
                         continue
                     t = (await el.inner_text()).strip().replace("\n", " ")
-                    if t and t not in seen:
+                    if not t:
+                        continue
+                    if t not in seen:
                         seen.add(t)
-                        elements.append(t)
+                        box = await el.bounding_box()
+                        entry = {"text": t}
+                        if box:
+                            entry["x"] = int(box["x"] + box["width"] / 2)
+                            entry["y"] = int(box["y"] + box["height"] / 2)
+                        elements.append(entry)
                 except Exception:
                     pass
 
-            # 2. Visible question/heading text (so agent knows what question is being asked)
-            question_text = []
-            q_handles = await page.query_selector_all(
-                "h1, h2, h3, h4, h5, p, span, li, [role='dialog'] *, [role='alertdialog'] *"
-            )
-            for el in q_handles[:40]:
-                try:
-                    if not await el.is_visible():
-                        continue
-                    t = (await el.inner_text()).strip().replace("\n", " ")
-                    if t and len(t) > 5 and t not in seen:
-                        seen.add(t)
-                        question_text.append(t)
-                except Exception:
-                    pass
+            # 2. All visible text via JS tree walker — catches div/p/span/li including
+            #    short words like "Fever", "Cough" (no length filter) and question text
+            #    inside div containers that CSS selectors miss
+            try:
+                page_text = await page.evaluate("""() => {
+                    const results = [];
+                    const seen = new Set();
+                    // Prefer main content area, fall back to body
+                    const root = document.querySelector(
+                        'main, [role="main"], .main-content, #main-content, article'
+                    ) || document.body;
+                    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+                    let node;
+                    while ((node = walker.nextNode())) {
+                        const t = node.textContent.trim().replace(/\\s+/g, ' ');
+                        if (t.length < 2) continue;
+                        const el = node.parentElement;
+                        if (!el) continue;
+                        const s = window.getComputedStyle(el);
+                        if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0')
+                            continue;
+                        if (!seen.has(t)) { seen.add(t); results.push(t); }
+                    }
+                    return results.slice(0, 60);
+                }""")
+            except Exception:
+                page_text = []
 
             return {
                 "url": url,
                 "title": title,
                 "interactive_elements": elements,
-                "page_text": question_text[:30],
+                "page_text": page_text,
             }
 
         elif req.action == "type":

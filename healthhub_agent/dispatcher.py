@@ -119,49 +119,79 @@ class Dispatcher:
     async def _clear_modals(self):
         """
         Dismiss any pop-ups, modals, or overlays that block interaction on live site.
-        Tries text-based buttons first, then close icon selectors.
+        Uses JS evaluation to find and click close buttons including SVG-icon buttons.
         """
-        # 1. Try text-based dismiss buttons
+        page = self._page
+
+        # 1. JS-based: find any visible overlay/modal and click its first button
+        #    This handles SVG icon close buttons (no text content) like HealthHub's newsletter popup
+        try:
+            clicked = await page.evaluate("""() => {
+                // Prioritise buttons with close/dismiss semantics
+                const closeSelectors = [
+                    'button[aria-label*="close" i]',
+                    'button[aria-label*="dismiss" i]',
+                    'button[title*="close" i]',
+                    '[data-dismiss]', '[data-bs-dismiss]',
+                    '.modal-close', '.close-btn', '.btn-close', '.modal__close',
+                ];
+                for (const sel of closeSelectors) {
+                    const el = document.querySelector(sel);
+                    if (el && el.offsetParent !== null) { el.click(); return true; }
+                }
+                // Find any fixed/absolute overlay with z-index > 10 and click its first button
+                const allEls = [...document.querySelectorAll('*')];
+                for (const el of allEls) {
+                    const s = window.getComputedStyle(el);
+                    const z = parseInt(s.zIndex) || 0;
+                    if ((s.position === 'fixed' || s.position === 'absolute') && z > 10
+                            && s.display !== 'none' && s.visibility !== 'hidden'
+                            && el.offsetHeight > 50 && el.offsetWidth > 50) {
+                        const btn = el.querySelector('button');
+                        if (btn && btn.offsetParent !== null) { btn.click(); return true; }
+                    }
+                }
+                return false;
+            }""")
+            if clicked:
+                await page.wait_for_timeout(600)
+                return
+        except Exception:
+            pass
+
+        # 2. Try text-based dismiss buttons
         for text in MODAL_DISMISS_TEXTS:
             try:
-                btn = self._page.get_by_role("button", name=re.compile(text, re.IGNORECASE))
+                btn = page.get_by_role("button", name=re.compile(text, re.IGNORECASE))
                 if await btn.first.is_visible():
                     await btn.first.click(timeout=1500)
-                    await self._page.wait_for_timeout(400)
+                    await page.wait_for_timeout(400)
             except Exception:
                 pass
 
-        # 2. Try close-icon buttons (X button, aria-label="Close", title="Close", etc.)
+        # 3. Try close-icon CSS selectors (Playwright-level, for elements JS missed)
         close_selectors = [
-            "button[aria-label*='close' i]",
-            "button[aria-label*='dismiss' i]",
-            "button[title*='close' i]",
-            "button[title*='dismiss' i]",
-            "[role='button'][aria-label*='close' i]",
-            ".modal__close",
-            ".modal-close",
-            ".close-btn",
-            ".btn-close",
-            "[data-dismiss='modal']",
-            "[data-bs-dismiss='modal']",
+            "button[aria-label*='close' i]", "button[aria-label*='dismiss' i]",
+            "button[title*='close' i]",      ".modal__close", ".modal-close",
+            ".close-btn", ".btn-close",      "[data-dismiss='modal']",
         ]
         for sel in close_selectors:
             try:
-                el = self._page.locator(sel)
+                el = page.locator(sel)
                 if await el.first.is_visible(timeout=800):
                     await el.first.click(timeout=1500)
-                    await self._page.wait_for_timeout(400)
+                    await page.wait_for_timeout(400)
                     break
             except Exception:
                 pass
 
-        # 3. Try buttons/elements whose text is ×, ✕, or X (close icons)
+        # 4. Try buttons whose visible text is a close symbol
         for symbol in ["×", "✕", "✗", "X", "x"]:
             try:
-                btn = self._page.get_by_role("button", name=re.compile(rf"^{re.escape(symbol)}$"))
+                btn = page.get_by_role("button", name=re.compile(rf"^{re.escape(symbol)}$"))
                 if await btn.first.is_visible(timeout=500):
                     await btn.first.click(timeout=1500)
-                    await self._page.wait_for_timeout(400)
+                    await page.wait_for_timeout(400)
                     break
             except Exception:
                 pass
