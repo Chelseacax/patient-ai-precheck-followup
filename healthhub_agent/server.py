@@ -101,14 +101,15 @@ class BookingRequest(BaseModel):
 
 
 class BrowserActionRequest(BaseModel):
-    action:   str
-    x:        int = 0
-    y:        int = 0
-    text:     str = ""   # text to type OR text/label to click
-    key:      str = ""
-    selector: str = ""   # optional CSS selector for direct targeting
-    role:     str = ""   # ARIA role (button, link, menuitem, …)
-    distance: int = 600  # pixels to scroll (for scroll action)
+    action:    str
+    x:         int = 0
+    y:         int = 0
+    text:      str = ""    # text to type OR text/label to click
+    key:       str = ""
+    selector:  str = ""    # optional CSS selector for direct targeting
+    role:      str = ""    # ARIA role (button, link, menuitem, …)
+    distance:  int = 600   # pixels to scroll (for scroll action)
+    direction: str = "down" # scroll direction: "up" or "down"
 
 
 # ── Browser state (screenshot + Singpass flag) ──────────────────────────────────
@@ -200,24 +201,24 @@ async def do_browser_action(req: BrowserActionRequest):
             await dispatcher._clear_modals()
 
         elif req.action == "scroll":
-            # Scroll the main page or a scrollable container
             page = dispatcher._page
             dist = req.distance if req.distance else 600
-            await page.evaluate(f"""
-                (() => {{
-                    // Prefer scrolling the main scrollable container (finds deepest one)
-                    const scrollable = Array.from(document.querySelectorAll('*')).filter(el => {{
-                        const st = getComputedStyle(el);
-                        return (st.overflow === 'auto' || st.overflow === 'scroll' ||
-                                st.overflowY === 'auto' || st.overflowY === 'scroll') &&
-                               el.scrollHeight > el.clientHeight + 10;
-                    }}).sort((a, b) => b.scrollHeight - a.scrollHeight);
-                    if (scrollable.length) scrollable[0].scrollBy(0, {dist});
-                    else window.scrollBy(0, {dist});
-                }})()
-            """)
+            # Negative delta scrolls UP; positive scrolls DOWN
+            delta = -dist if req.direction == "up" else dist
+
+            # If a CSS selector is given, scroll that specific element
+            if req.selector:
+                el = page.locator(req.selector).first
+                try:
+                    await el.evaluate(f"el => el.scrollBy(0, {delta})")
+                except Exception:
+                    pass  # fallback to page-level scroll below
+            else:
+                # Use mouse.wheel — works correctly inside nested scrollable divs
+                await page.mouse.wheel(0, delta)
+
             await asyncio.sleep(0.6)  # let lazy-loaded content render
-            return {{"scrolled": dist}}
+            return {"scrolled": delta, "direction": req.direction}
         await asyncio.sleep(0.5)
         return {"success": True}
     except Exception as e:
