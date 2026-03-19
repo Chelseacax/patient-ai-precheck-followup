@@ -1,56 +1,60 @@
+"""
+dispatcher.py — Resilient Playwright bridge for the LIVE healthhub.sg site.
+
+Key design principles:
+- All selectors use ARIA roles or text-based matching (no brittle CSS classes)
+- Singpass detection pauses the agent and prompts the user via the chat
+- A modal-clearing pass runs before every major interaction
+- Graceful UI-mismatch errors returned instead of Python exceptions
+- Screenshots stream continuously via /api/browser/state
+"""
+
 import asyncio
 import base64
 import re
 from typing import Optional
 
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, TimeoutError as PWTimeout
 
 from actions import REGISTRY
 
-HEALTHHUB_URL = "http://localhost:5173"
+# ── Production URLs ────────────────────────────────────────────────────────────
+HEALTHHUB_BASE = "https://eservices.healthhub.sg"
 
-INSTITUTIONS = [
-    "Singapore General Hospital",
-    "National University Hospital",
-    "Khoo Teck Puat Hospital",
-    "Tan Tock Seng Hospital",
-    "Clementi Polyclinic",
-    "Buona Vista Polyclinic",
-    "Jurong Polyclinic",
-]
+# Real navigation targets on the live site
+PAGE_URLS = {
+    "home":         HEALTHHUB_BASE,
+    "appointments": f"{HEALTHHUB_BASE}/appointments",
+    "medications":  f"{HEALTHHUB_BASE}/medications",
+    "lab-reports":  f"{HEALTHHUB_BASE}/health-records",
+    "profile":      f"{HEALTHHUB_BASE}/profile",
+    "dashboard":    f"{HEALTHHUB_BASE}/dashboard",
+    "immunisation": f"{HEALTHHUB_BASE}/immunisation",
+}
 
-SPECIALTIES = [
-    "Cardiology",
-    "Eye Clinic",
-    "General Practice",
-    "Neurology",
-    "Dental",
-    "Orthopaedics",
-    "Paediatrics",
-    "Vaccination",
-]
+# Singpass login page signals
+SINGPASS_URL_TOKENS  = ["singpass.gov.sg", "id.gov.sg", "api.myinfo.gov.sg"]
+SINGPASS_TEXT_TOKENS = ["singpass", "scan qr", "qr code", "log in with singpass",
+                        "login with singpass", "authenticate with singpass"]
 
-REASONS = [
-    "Follow-up consultation",
-    "Acute pain or discomfort",
-    "Routine check-up",
-    "Prescription renewal",
-    "Flu jab / Vaccination",
-    "Pre-surgery assessment",
-    "Specialist referral",
-    "Lab test results review",
+# Modals / overlays that block interaction on live site
+MODAL_DISMISS_TEXTS = [
+    "Accept", "Agree", "I Agree", "OK", "Got it", "Close",
+    "Continue", "Accept All", "I Accept", "Dismiss",
 ]
 
 
 class Dispatcher:
     def __init__(self):
         self._playwright = None
-        self._browser = None
-        self._context = None
-        self._page = None
-        self._lock = asyncio.Lock()
-        self._ready = False
+        self._browser    = None
+        self._context    = None
+        self._page       = None
+        self._lock       = asyncio.Lock()
+        self._ready      = False
         self._action_count = 0
+
+    # ── Properties ──────────────────────────────────────────────────────────────
 
     @property
     def ready(self) -> bool:
@@ -61,27 +65,30 @@ class Dispatcher:
         return self._action_count
 
     async def current_url(self) -> str:
-        if self._page:
-            return self._page.url
-        return ""
+        return self._page.url if self._page else ""
+
+    # ── Lifecycle ────────────────────────────────────────────────────────────────
 
     async def start_browser(self):
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(
             headless=False,
-            args=["--window-size=1280,800"],
-            slow_mo=500,   # slower so every click is visible
+            args=["--window-size=1280,900", "--no-sandbox"],
+            slow_mo=200,
         )
         self._context = await self._browser.new_context(
-            viewport={"width": 1280, "height": 800}
+            viewport={"width": 1280, "height": 900},
+            user_agent=(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0.0.0 Safari/537.36"
+            ),
         )
         self._page = await self._context.new_page()
 
-        await self._page.goto(HEALTHHUB_URL)
-        await self._page.wait_for_load_state("networkidle")
-        await self._page.evaluate("localStorage.setItem('hh_auth', '1')")
-        await self._page.goto(f"{HEALTHHUB_URL}/app")
-        await self._page.wait_for_load_state("networkidle")
+        # Navigate to live HealthHub home
+        await self._page.goto(HEALTHHUB_BASE)
+        await self._safe_wait_for_load()
         self._ready = True
 
     async def stop_browser(self):
@@ -91,6 +98,82 @@ class Dispatcher:
         if self._playwright:
             await self._playwright.stop()
 
+    async def _ensure_browser(self):
+        if not self._ready:
+            try:
+                await self.stop_browser()
+            except Exception:
+                pass
+            await self.start_browser()
+
+    # ── Helpers ──────────────────────────────────────────────────────────────────
+
+    async def _safe_wait_for_load(self, state="networkidle", timeout=15000):
+        """Wait for page load, but don't crash on timeout."""
+        try:
+            await self._page.wait_for_load_state(state, timeout=timeout)
+        except PWTimeout:
+            pass
+        await self._page.wait_for_timeout(500)
+
+    async def _clear_modals(self):
+        """
+        Dismiss any Terms/Privacy/Cookie pop-ups that block interaction on live site.
+        Tries each dismiss text silently.
+        """
+        for text in MODAL_DISMISS_TEXTS:
+            try:
+                btn = self._page.get_by_role("button", name=re.compile(text, re.IGNORECASE))
+                if await btn.first.is_visible():
+                    await btn.first.click(timeout=1500)
+                    await self._page.wait_for_timeout(400)
+            except Exception:
+                pass
+
+    async def _try_click(self, locator_fn, description: str, timeout=6000) -> dict:
+        """
+        Attempt a click. Returns {"success": True} or {"ui_mismatch": True, "description": ...}
+        instead of raising an exception.
+        """
+        try:
+            loc = locator_fn()
+            await loc.first.wait_for(state="visible", timeout=timeout)
+            await loc.first.click(timeout=timeout)
+            return {"success": True}
+        except Exception as e:
+            return {
+                "ui_mismatch": True,
+                "description": description,
+                "error": str(e)[:200],
+            }
+
+    def _normalize_time(self, value: str) -> str:
+        value = value.strip()
+        m = re.match(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", value, re.IGNORECASE)
+        if m:
+            h = int(m.group(1))
+            mins = m.group(2) or "00"
+            period = (m.group(3) or "").upper()
+            if not period:
+                period = "PM" if h >= 12 else "AM"
+                if h > 12:
+                    h -= 12
+            return f"{h}:{mins} {period}"
+        return value
+
+    def _fuzzy_match(self, user_input: str, options: list) -> str:
+        inp = user_input.lower().strip()
+        for opt in options:
+            if inp in opt.lower() or opt.lower() in inp:
+                return opt
+        words = inp.split()
+        for opt in options:
+            if any(w in opt.lower() for w in words if len(w) > 2):
+                return opt
+        return options[0]
+
+    # ── Screenshots ──────────────────────────────────────────────────────────────
+
     async def screenshot_b64(self) -> str:
         if not self._page:
             return ""
@@ -98,17 +181,51 @@ class Dispatcher:
             data = await self._page.screenshot(type="jpeg", quality=75)
             return base64.b64encode(data).decode()
         except Exception:
-            self._ready = False
             return ""
 
-    async def _ensure_browser(self):
-        """Restart browser if it was closed."""
-        if not self._ready:
-            try:
-                await self.stop_browser()
-            except Exception:
-                pass
-            await self.start_browser()
+    # ── Singpass Detection ───────────────────────────────────────────────────────
+
+    async def is_singpass_page(self) -> bool:
+        """Return True if the current page is a Singpass QR login screen."""
+        if not self._page:
+            return False
+        try:
+            url = self._page.url.lower()
+            if any(tok in url for tok in SINGPASS_URL_TOKENS):
+                return True
+            # Also scan page text content (handles embeds)
+            content = (await self._page.content()).lower()
+            hits = sum(1 for tok in SINGPASS_TEXT_TOKENS if tok in content)
+            return hits >= 2  # Require 2 signals to avoid false positives
+        except Exception:
+            return False
+
+    async def wait_for_post_singpass(self, timeout_ms: int = 180_000) -> bool:
+        """
+        Poll until the browser leaves the Singpass domain (user completed login).
+        Returns True if login detected within timeout, False otherwise.
+        """
+        deadline = asyncio.get_event_loop().time() + timeout_ms / 1000
+        while asyncio.get_event_loop().time() < deadline:
+            await asyncio.sleep(2)
+            if not await self.is_singpass_page():
+                # Back on HealthHub — give the page a moment to settle
+                await self._safe_wait_for_load()
+                return True
+        return False
+
+    async def get_page_state(self) -> dict:
+        """Full state snapshot: screenshot + URL + Singpass flag."""
+        url         = await self.current_url()
+        on_singpass = await self.is_singpass_page()
+        screenshot  = await self.screenshot_b64()
+        return {
+            "url":             url,
+            "on_singpass_page": on_singpass,
+            "image":           screenshot,
+        }
+
+    # ── Action Registry ──────────────────────────────────────────────────────────
 
     def validate(self, action_name: str, params: dict) -> Optional[str]:
         if action_name not in REGISTRY:
@@ -125,257 +242,231 @@ class Dispatcher:
             action = REGISTRY[action_name](self._page)
             return await action.execute(params)
 
-    # ── Navigation ──────────────────────────────────────────────────────────────
+    # ── Navigation ───────────────────────────────────────────────────────────────
 
     async def navigate_healthhub(self, page: str) -> dict:
         await self._ensure_browser()
-        urls = {
-            "home":         f"{HEALTHHUB_URL}/app",
-            "appointments": f"{HEALTHHUB_URL}/app/appointments",
-            "medications":  f"{HEALTHHUB_URL}/app/medications",
-            "lab-reports":  f"{HEALTHHUB_URL}/app/lab-reports",
-            "profile":      f"{HEALTHHUB_URL}/app/profile",
-        }
-        async with self._lock:
-            url = urls.get(page, f"{HEALTHHUB_URL}/app")
-            await self._page.goto(url)
-            await self._page.wait_for_load_state("networkidle")
-            await self._page.wait_for_timeout(500)
-            return {"navigated_to": page, "url": url}
+        url = PAGE_URLS.get(page, HEALTHHUB_BASE)
 
-    # ── Full Booking Automation ─────────────────────────────────────────────────
+        async with self._lock:
+            await self._page.goto(url)
+            await self._safe_wait_for_load()
+            await self._clear_modals()
+            on_singpass = await self.is_singpass_page()
+            return {
+                "navigated_to":    page,
+                "url":             url,
+                "on_singpass_page": on_singpass,
+            }
+
+    # ── Live-Site Booking ─────────────────────────────────────────────────────────
 
     async def book_on_healthhub(
         self,
         institution: str,
-        specialty: str,
-        date: str,       # "YYYY-MM-DD"
-        time: str,       # e.g. "14:00" or "2:00 PM"
-        reason: str,
+        specialty:   str,
+        date:        str,    # "YYYY-MM-DD"
+        time:        str,
+        reason:      str,
     ) -> dict:
         """
-        Run the ENTIRE HealthHub booking form automatically.
-        Clicks every step: institution → specialty → Continue → date → time →
-        Continue → reason → Continue → Confirm Appointment.
-        Screenshots stream to the frontend throughout.
+        Navigate to the live HealthHub booking flow.
+        Uses ARIA/text selectors exclusively.
+        Returns a graceful ui_mismatch dict instead of raising on failures.
+        The VLM agent in app.py handles interactive form steps via screenshots.
         """
         await self._ensure_browser()
         async with self._lock:
             self._action_count += 1
 
-            # Parse date
+            # Dismiss any modals first
+            await self._clear_modals()
+
+            booking_url = f"{HEALTHHUB_BASE}/appointments/book"
+            await self._page.goto(booking_url)
+            await self._safe_wait_for_load()
+
+            # If Singpass wall appears, return early — agent must wait for user
+            if await self.is_singpass_page():
+                return {
+                    "on_singpass_page": True,
+                    "paused": True,
+                    "message": (
+                        "Singpass login required. "
+                        "Please guide user to scan the QR code, then retry."
+                    ),
+                }
+
+            # Clear any fresh modals after navigation
+            await self._clear_modals()
+
+            # --- Step 1: Find and click a "Book Appointment" / "New Booking" button ---
+            new_booking = await self._try_click(
+                lambda: self._page.get_by_role(
+                    "button", name=re.compile(r"book.*(appointment|new)", re.IGNORECASE)
+                ).or_(
+                    self._page.get_by_text(re.compile(r"book appointment", re.IGNORECASE))
+                ),
+                description="Book Appointment button not found on live site",
+            )
+            if new_booking.get("ui_mismatch"):
+                return {**new_booking, "step": "find_book_button"}
+            await self._page.wait_for_timeout(800)
+
+            # --- Step 2: Select institution ----------------------------------------
+            inst_result = await self._try_click(
+                lambda: self._page.get_by_role(
+                    "button", name=re.compile(re.escape(institution.split()[0]), re.IGNORECASE)
+                ).or_(
+                    self._page.get_by_text(re.compile(re.escape(institution), re.IGNORECASE))
+                ),
+                description=f"Institution '{institution}' button not found",
+            )
+            if inst_result.get("ui_mismatch"):
+                return {**inst_result, "step": "select_institution"}
+            await self._page.wait_for_timeout(600)
+
+            # --- Step 3: Select specialty -------------------------------------------
+            spec_result = await self._try_click(
+                lambda: self._page.get_by_role(
+                    "button", name=re.compile(re.escape(specialty), re.IGNORECASE)
+                ).or_(
+                    self._page.get_by_text(re.compile(re.escape(specialty), re.IGNORECASE))
+                ),
+                description=f"Specialty '{specialty}' button not found",
+            )
+            if spec_result.get("ui_mismatch"):
+                return {**spec_result, "step": "select_specialty"}
+            await self._page.wait_for_timeout(600)
+
+            # --- Step 4: Continue to calendar ---------------------------------------
+            cont1 = await self._try_click(
+                lambda: self._page.get_by_role(
+                    "button", name=re.compile("continue", re.IGNORECASE)
+                ).filter(lambda b: not b.is_disabled()),
+                description="Continue button (institution→calendar) not found",
+                timeout=10000,
+            )
+            if cont1.get("ui_mismatch"):
+                # Soft fail: live site might auto-advance
+                pass
+            await self._page.wait_for_timeout(900)
+
+            # --- Step 5: Click date -------------------------------------------------
             try:
                 year, month, day = map(int, date.split("-"))
             except Exception:
                 year, month, day = 2026, 3, 20
 
-            # Match inputs to known values
-            inst   = self._fuzzy_match(institution, INSTITUTIONS)
-            spec   = self._fuzzy_match(specialty, SPECIALTIES)
-            rsn    = self._fuzzy_match(reason, REASONS)
-            time12 = self._normalize_time(time)
-
-            # ── 1. Appointments page ──────────────────────────────────────────
-            await self._page.goto(f"{HEALTHHUB_URL}/app/appointments")
-            await self._page.wait_for_load_state("networkidle")
+            date_result = await self._try_click(
+                lambda: self._page.get_by_role(
+                    "button", name=re.compile(rf"^{day}$")
+                ).filter(lambda b: not b.is_disabled()),
+                description=f"Date day '{day}' not found in calendar",
+                timeout=5000,
+            )
+            if date_result.get("ui_mismatch"):
+                return {**date_result, "step": "select_date"}
             await self._page.wait_for_timeout(600)
 
-            # ── 2. Click "Book New" ───────────────────────────────────────────
-            await self._page.locator("button").filter(
-                has_text=re.compile(r"Book\s+New", re.IGNORECASE)
-            ).first.click()
-            await self._page.wait_for_timeout(800)
+            # --- Step 6: Click time slot -------------------------------------------
+            time12    = self._normalize_time(time)
+            period    = "PM" if "PM" in time12 else "AM"
+            hour_part = time12.split(":")[0]
 
-            # ── 3. Click institution ──────────────────────────────────────────
-            await self._page.locator("button").filter(has_text=inst).first.click()
-            await self._page.wait_for_timeout(600)
-
-            # ── 4. Click specialty ────────────────────────────────────────────
-            # Specialty buttons have CSS class "relative" (for VAX badge positioning);
-            # institution buttons do NOT have "relative", preventing false matches
-            # like "General Practice" accidentally clicking "Singapore General Hospital".
-            await self._page.locator("button.relative").filter(
-                has_text=re.compile(re.escape(spec), re.IGNORECASE)
-            ).first.click()
-            await self._page.wait_for_timeout(600)
-
-            # ── 5. Continue → calendar ────────────────────────────────────────
-            await self._page.locator("button:not([disabled])").filter(
-                has_text=re.compile("Continue", re.IGNORECASE)
-            ).first.click(timeout=10000)
-            await self._page.wait_for_timeout(900)
-
-            # ── 6. Navigate calendar to correct month ─────────────────────────
-            # Calendar starts at March 2026
-            months_to_advance = (year - 2026) * 12 + (month - 3)
-            for _ in range(max(0, months_to_advance)):
-                # Next-month chevron: second icon-button inside the calendar header
-                await self._page.evaluate("""
-                    () => {
-                        const btns = Array.from(document.querySelectorAll('button'));
-                        const chevrons = btns.filter(b =>
-                            b.textContent.trim() === '' ||
-                            b.innerHTML.includes('ChevronRight') ||
-                            b.innerHTML.includes('svg')
-                        );
-                        if (chevrons.length >= 2) chevrons[1].click();
-                    }
-                """)
-                await self._page.wait_for_timeout(400)
-
-            # ── 7. Click calendar day ─────────────────────────────────────────
-            # Use Playwright locator (reliably triggers React's onClick handler)
-            try:
-                await self._page.locator(
-                    "button.aspect-square:not([disabled])"
-                ).filter(has_text=re.compile(rf"^{day}$")).first.click(timeout=5000)
-            except Exception:
-                # Fallback: page.evaluate in case locator can't find it
-                await self._page.evaluate(f"""
-                    (() => {{
-                        const btns = Array.from(document.querySelectorAll('button'));
-                        const target = btns.find(b =>
-                            !b.disabled &&
-                            b.textContent.trim() === '{day}' &&
-                            b.className.includes('aspect-square')
-                        );
-                        if (target) target.click();
-                    }})()
-                """)
-            # Wait for time slots section to appear
-            try:
-                await self._page.wait_for_selector(
-                    "text=Available Slots", timeout=3000
+            time_clicked = False
+            for pattern in [
+                re.escape(time12),
+                rf"{re.escape(hour_part)}:\d{{2}}\s*{period}",
+                rf"\d{{1,2}}:\d{{2}}\s*{period}",
+            ]:
+                res = await self._try_click(
+                    lambda p=pattern: self._page.get_by_role(
+                        "button", name=re.compile(p, re.IGNORECASE)
+                    ),
+                    description=f"Time slot matching '{pattern}'",
+                    timeout=3000,
                 )
-            except Exception:
-                pass
-            await self._page.wait_for_timeout(400)
+                if not res.get("ui_mismatch"):
+                    time_clicked = True
+                    break
 
-            # ── 8. Click time slot ────────────────────────────────────────────
-            period = "PM" if "PM" in time12 else "AM"
-            hour = time12.split(":")[0]
-            clicked = False
-
-            # Strategy 1: exact text match
-            try:
-                await self._page.locator("button:not([disabled])").filter(
-                    has_text=re.compile(re.escape(time12), re.IGNORECASE)
-                ).first.click(timeout=2000)
-                clicked = True
-            except Exception:
-                pass
-
-            # Strategy 2: same hour, same period (e.g. requested 10:00 AM → 10:30 AM)
-            if not clicked:
-                try:
-                    await self._page.locator("button:not([disabled])").filter(
-                        has_text=re.compile(
-                            rf"{re.escape(hour)}:\d{{2}}\s*{period}", re.IGNORECASE
-                        )
-                    ).first.click(timeout=2000)
-                    clicked = True
-                except Exception:
-                    pass
-
-            # Strategy 3: any slot in same period (AM or PM)
-            if not clicked:
-                try:
-                    await self._page.locator("button:not([disabled])").filter(
-                        has_text=re.compile(
-                            rf"\d{{1,2}}:\d{{2}}\s*{period}", re.IGNORECASE
-                        )
-                    ).first.click(timeout=2000)
-                    clicked = True
-                except Exception:
-                    pass
-
-            # Strategy 4: absolute fallback — first any available time slot
-            if not clicked:
-                try:
-                    await self._page.locator("button:not([disabled])").filter(
-                        has_text=re.compile(r"\d{1,2}:\d{2}\s*(AM|PM)", re.IGNORECASE)
-                    ).first.click(timeout=2000)
-                except Exception:
-                    pass
-
+            if not time_clicked:
+                return {
+                    "ui_mismatch": True,
+                    "step": "select_time",
+                    "description": f"No available time slot found near '{time}'",
+                }
             await self._page.wait_for_timeout(600)
 
-            # ── 9. Continue → reason ──────────────────────────────────────────
-            # Wait for Continue to become enabled (date + slot both selected)
-            await self._page.locator(
-                "button:not([disabled])"
-            ).filter(
-                has_text=re.compile("Continue", re.IGNORECASE)
-            ).first.click(timeout=10000)
+            # --- Step 7: Continue to reason ----------------------------------------
+            await self._try_click(
+                lambda: self._page.get_by_role(
+                    "button", name=re.compile("continue", re.IGNORECASE)
+                ),
+                description="Continue button (date→reason) not found",
+                timeout=10000,
+            )
             await self._page.wait_for_timeout(900)
 
-            # ── 10. Click reason chip ─────────────────────────────────────────
-            try:
-                await self._page.locator("button").filter(
-                    has_text=re.compile(re.escape(rsn.split()[0]), re.IGNORECASE)
-                ).first.click(timeout=3000)
-            except Exception:
+            # --- Step 8: Select/fill reason ----------------------------------------
+            reason_result = await self._try_click(
+                lambda: self._page.get_by_role(
+                    "button", name=re.compile(re.escape(reason.split()[0]), re.IGNORECASE)
+                ).or_(
+                    self._page.get_by_text(re.compile(re.escape(reason), re.IGNORECASE))
+                ),
+                description=f"Reason '{reason}' chip not found",
+                timeout=3000,
+            )
+            if reason_result.get("ui_mismatch"):
+                # Fallback: type in a textarea
                 try:
-                    await self._page.locator("textarea").first.fill(reason)
+                    ta = self._page.get_by_role("textbox")
+                    await ta.first.fill(reason, timeout=3000)
                 except Exception:
                     pass
             await self._page.wait_for_timeout(500)
 
-            # ── 11. Continue → confirmation ───────────────────────────────────
-            await self._page.locator("button:not([disabled])").filter(
-                has_text=re.compile("Continue", re.IGNORECASE)
-            ).first.click(timeout=10000)
+            # --- Step 9: Continue to confirmation ----------------------------------
+            await self._try_click(
+                lambda: self._page.get_by_role(
+                    "button", name=re.compile("continue", re.IGNORECASE)
+                ),
+                description="Continue button (reason→confirm) not found",
+                timeout=10000,
+            )
             await self._page.wait_for_timeout(900)
 
-            # ── 12. Confirm Appointment ───────────────────────────────────────
-            await self._page.get_by_role(
-                "button", name=re.compile("Confirm Appointment", re.IGNORECASE)
-            ).click()
-            await self._page.wait_for_timeout(2500)
+            # --- Step 10: Confirm Appointment ----------------------------------------
+            confirm_result = await self._try_click(
+                lambda: self._page.get_by_role(
+                    "button", name=re.compile(r"confirm.*(appointment)?", re.IGNORECASE)
+                ),
+                description="Confirm Appointment button not found",
+                timeout=10000,
+            )
+            if confirm_result.get("ui_mismatch"):
+                return {**confirm_result, "step": "confirm"}
+
+            await self._page.wait_for_timeout(3000)
+
+            # Post-login check (HealthHub may redirect after booking)
+            if await self.is_singpass_page():
+                return {
+                    "on_singpass_page": True,
+                    "paused": True,
+                    "message": "Singpass re-authentication required. Please scan the QR code.",
+                }
 
             return {
-                "booked": True,
-                "institution": inst,
-                "specialty": spec,
-                "date": date,
-                "time": time12,
-                "reason": rsn,
+                "booked":      True,
+                "institution": institution,
+                "specialty":   specialty,
+                "date":        date,
+                "time":        time12,
+                "reason":      reason,
             }
-
-    # ── Helpers ─────────────────────────────────────────────────────────────────
-
-    def _fuzzy_match(self, user_input: str, options: list) -> str:
-        inp = user_input.lower().strip()
-        # Exact substring match
-        for opt in options:
-            if inp in opt.lower() or opt.lower() in inp:
-                return opt
-        # Word-level match
-        words = inp.split()
-        for opt in options:
-            if any(w in opt.lower() for w in words if len(w) > 2):
-                return opt
-        return options[0]
-
-    def _normalize_time(self, value: str) -> str:
-        """Convert user time input to '9:00 AM' format."""
-        value = value.strip()
-        m = re.match(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", value, re.IGNORECASE)
-        if m:
-            h = int(m.group(1))
-            mins = m.group(2) or "00"
-            period = (m.group(3) or "").upper()
-            if not period:
-                if h >= 12:
-                    period = "PM"
-                    if h > 12:
-                        h -= 12
-                else:
-                    period = "AM"
-            elif period == "PM" and h < 12:
-                pass  # keep h as-is for display
-            return f"{h}:{mins} {period}"
-        return value
 
 
 dispatcher = Dispatcher()

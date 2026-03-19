@@ -3,7 +3,6 @@ import json
 import time
 import uuid
 from contextlib import asynccontextmanager
-from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
@@ -21,14 +20,14 @@ connected_ws: list[WebSocket] = []
 
 def make_log_entry(action: str, params: dict, source: str = "api") -> dict:
     return {
-        "id": str(uuid.uuid4())[:8],
+        "id":        str(uuid.uuid4())[:8],
         "timestamp": time.strftime("%H:%M:%S"),
-        "action": action,
-        "params": params,
-        "source": source,
-        "status": "queued",
-        "result": None,
-        "error": None,
+        "action":    action,
+        "params":    params,
+        "source":    source,
+        "status":    "queued",
+        "result":    None,
+        "error":     None,
     }
 
 
@@ -43,7 +42,7 @@ async def broadcast(msg: dict):
         connected_ws.remove(ws)
 
 
-# ── Lifespan ───────────────────────────────────────────────────────────────────
+# ── Lifespan ────────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     asyncio.create_task(dispatcher.start_browser())
@@ -51,16 +50,18 @@ async def lifespan(app: FastAPI):
     await dispatcher.stop_browser()
 
 
-app = FastAPI(title="HealthHub Agent Bridge", lifespan=lifespan)
+app = FastAPI(title="HealthHub Agent Bridge — Live Site", lifespan=lifespan)
 
 
-# ── API routes ─────────────────────────────────────────────────────────────────
+# ── Status ──────────────────────────────────────────────────────────────────────
 @app.get("/api/status")
 async def get_status():
+    on_singpass = await dispatcher.is_singpass_page()
     return {
-        "ready": dispatcher.ready,
-        "current_url": await dispatcher.current_url(),
+        "ready":        dispatcher.ready,
+        "current_url":  await dispatcher.current_url(),
         "action_count": dispatcher.action_count,
+        "on_singpass_page": on_singpass,
     }
 
 
@@ -68,7 +69,7 @@ async def get_status():
 async def list_actions():
     return {
         name: {
-            "description": cls.DESCRIPTION,
+            "description":   cls.DESCRIPTION,
             "params_schema": cls.PARAMS_SCHEMA,
         }
         for name, cls in REGISTRY.items()
@@ -80,6 +81,7 @@ async def get_log():
     return list(reversed(action_log))
 
 
+# ── Request models ──────────────────────────────────────────────────────────────
 class ActionRequest(BaseModel):
     action: str
     params: dict = {}
@@ -87,37 +89,186 @@ class ActionRequest(BaseModel):
 
 
 class NavigateRequest(BaseModel):
-    page: str  # home | appointments | medications | lab-reports | profile
+    page: str   # home | appointments | medications | lab-reports | profile | dashboard
 
 
 class BookingRequest(BaseModel):
     institution: str
-    specialty: str
-    date: str        # YYYY-MM-DD
-    time: str        # e.g. "14:00" or "2:00 PM"
-    reason: str
+    specialty:   str
+    date:        str   # YYYY-MM-DD
+    time:        str   # e.g. "14:00" or "2:00 PM"
+    reason:      str
 
 
+class BrowserActionRequest(BaseModel):
+    action:   str
+    x:        int = 0
+    y:        int = 0
+    text:     str = ""   # text to type OR text/label to click
+    key:      str = ""
+    selector: str = ""   # optional CSS selector for direct targeting
+    role:     str = ""   # ARIA role (button, link, menuitem, …)
+    distance: int = 600  # pixels to scroll (for scroll action)
+
+
+# ── Browser state (screenshot + Singpass flag) ──────────────────────────────────
+@app.get("/api/browser/state")
+async def get_browser_state():
+    state = await dispatcher.get_page_state()
+    # Broadcast Singpass status change via WebSocket so frontend can react
+    if state.get("on_singpass_page"):
+        await broadcast({"type": "singpass_wall", "url": state.get("url", "")})
+    return state
+
+
+# ── Browser click/type actions ──────────────────────────────────────────────────
+@app.post("/api/browser/action")
+async def do_browser_action(req: BrowserActionRequest):
+    if not dispatcher.ready or not dispatcher._page:
+        return {"error": "Browser not ready"}
+    try:
+        if req.action == "click":
+            # Raw pixel click
+            await dispatcher._page.mouse.click(req.x, req.y)
+
+        elif req.action == "click_text":
+            # ARIA / text-based click — much more reliable on live sites
+            import re as _re
+            page = dispatcher._page
+            clicked = False
+
+            # 1. If a CSS selector is provided, use it directly
+            if req.selector:
+                loc = page.locator(req.selector)
+                if await loc.first.is_visible():
+                    await loc.first.click(timeout=6000)
+                    clicked = True
+
+            # 2. Try by ARIA role + name
+            if not clicked and req.role and req.text:
+                loc = page.get_by_role(req.role, name=_re.compile(req.text, _re.IGNORECASE))
+                if await loc.first.is_visible():
+                    await loc.first.click(timeout=6000)
+                    clicked = True
+
+            # 3. Try any role matching the text label
+            if not clicked and req.text:
+                for role in ["button", "link", "menuitem", "option", "tab"]:
+                    loc = page.get_by_role(role, name=_re.compile(req.text, _re.IGNORECASE))
+                    try:
+                        if await loc.first.is_visible(timeout=1500):
+                            await loc.first.click(timeout=6000)
+                            clicked = True
+                            break
+                    except Exception:
+                        continue
+
+            # 4. Fallback: get_by_text (partial match)
+            if not clicked and req.text:
+                loc = page.get_by_text(_re.compile(req.text, _re.IGNORECASE))
+                if await loc.first.is_visible(timeout=2000):
+                    await loc.first.click(timeout=6000)
+                    clicked = True
+
+            if not clicked:
+                return {"error": f"Could not find element matching text: '{req.text}'"}
+
+        elif req.action == "read_page":
+            # Return the current URL + visible text links/buttons for agent context
+            page = dispatcher._page
+            url   = page.url
+            title = await page.title()
+            # Grab visible interactive text
+            handles = await page.query_selector_all("a, button, [role='button'], [role='link'], [role='menuitem']")
+            elements = []
+            for el in handles[:60]:  # cap at 60 to avoid huge payloads
+                try:
+                    visible = await el.is_visible()
+                    if visible:
+                        t = (await el.inner_text()).strip().replace("\n", " ")
+                        if t:
+                            elements.append(t)
+                except Exception:
+                    pass
+            return {"url": url, "title": title, "interactive_elements": elements}
+
+        elif req.action == "type":
+            await dispatcher._page.keyboard.type(req.text)
+        elif req.action == "press":
+            await dispatcher._page.keyboard.press(req.key)
+        elif req.action == "clear_modals":
+            await dispatcher._clear_modals()
+
+        elif req.action == "scroll":
+            # Scroll the main page or a scrollable container
+            page = dispatcher._page
+            dist = req.distance if req.distance else 600
+            await page.evaluate(f"""
+                (() => {{
+                    // Prefer scrolling the main scrollable container (finds deepest one)
+                    const scrollable = Array.from(document.querySelectorAll('*')).filter(el => {{
+                        const st = getComputedStyle(el);
+                        return (st.overflow === 'auto' || st.overflow === 'scroll' ||
+                                st.overflowY === 'auto' || st.overflowY === 'scroll') &&
+                               el.scrollHeight > el.clientHeight + 10;
+                    }}).sort((a, b) => b.scrollHeight - a.scrollHeight);
+                    if (scrollable.length) scrollable[0].scrollBy(0, {dist});
+                    else window.scrollBy(0, {dist});
+                }})()
+            """)
+            await asyncio.sleep(0.6)  # let lazy-loaded content render
+            return {{"scrolled": dist}}
+        await asyncio.sleep(0.5)
+        return {"success": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ── Wait for Singpass login to complete ─────────────────────────────────────────
+@app.post("/api/singpass/wait")
+async def wait_for_singpass(timeout_ms: int = 180_000):
+    """
+    Long-poll: blocks until the browser leaves the Singpass domain (user scanned QR).
+    Returns {"logged_in": True} or {"timed_out": True}.
+    """
+    success = await dispatcher.wait_for_post_singpass(timeout_ms)
+    if success:
+        await broadcast({"type": "singpass_done"})
+        return {"logged_in": True}
+    return {"timed_out": True}
+
+
+# ── Navigate ─────────────────────────────────────────────────────────────────────
 @app.post("/api/navigate")
 async def navigate(req: NavigateRequest):
     try:
         result = await dispatcher.navigate_healthhub(req.page)
-        await broadcast({"type": "navigate", "page": req.page})
+        await broadcast({"type": "navigate", "page": req.page, "url": result.get("url", "")})
+        if result.get("on_singpass_page"):
+            await broadcast({"type": "singpass_wall", "step": "navigate"})
         return result
     except Exception as exc:
         return JSONResponse(status_code=500, content={"error": str(exc)})
 
 
+# ── Full booking ─────────────────────────────────────────────────────────────────
 @app.post("/api/booking/full")
 async def booking_full(req: BookingRequest):
     if not dispatcher.ready:
         return JSONResponse(status_code=503, content={"error": "Browser not ready"})
+
     await broadcast({"type": "booking_start", "details": req.model_dump()})
     try:
         result = await dispatcher.book_on_healthhub(
             req.institution, req.specialty, req.date, req.time, req.reason
         )
-        await broadcast({"type": "booking_done", "result": result})
+        # Graceful ui_mismatch — broadcast so frontend / agent know to ask user
+        if result.get("ui_mismatch"):
+            await broadcast({"type": "ui_mismatch", "result": result})
+        elif result.get("on_singpass_page"):
+            await broadcast({"type": "singpass_wall", "step": "booking"})
+        else:
+            await broadcast({"type": "booking_done", "result": result})
         return result
     except Exception as exc:
         import traceback
@@ -127,9 +278,9 @@ async def booking_full(req: BookingRequest):
         return JSONResponse(status_code=500, content={"error": str(exc), "detail": err})
 
 
+# ── Agent action (registry) ──────────────────────────────────────────────────────
 @app.post("/api/agent/action")
 async def run_action(req: ActionRequest):
-    # Validate
     error = dispatcher.validate(req.action, req.params)
     if error:
         return JSONResponse(status_code=400, content={"success": False, "error": error})
@@ -137,7 +288,6 @@ async def run_action(req: ActionRequest):
     entry = make_log_entry(req.action, req.params, req.source)
     action_log.append(entry)
     await broadcast({"type": "action_started", "entry": entry})
-
     entry["status"] = "running"
     await broadcast({"type": "action_update", "entry": entry})
 
@@ -154,23 +304,22 @@ async def run_action(req: ActionRequest):
         return JSONResponse(status_code=500, content={"success": False, "error": str(exc)})
 
 
-# ── WebSocket ──────────────────────────────────────────────────────────────────
+# ── WebSocket — live screenshot stream ──────────────────────────────────────────
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     connected_ws.append(ws)
-    # Send current log on connect
     await ws.send_text(json.dumps({"type": "log_sync", "log": list(reversed(action_log))}))
     try:
         while True:
             if dispatcher.ready:
-                screenshot = await dispatcher.screenshot_b64()
-                if screenshot:
-                    url = await dispatcher.current_url()
+                state = await dispatcher.get_page_state()
+                if state.get("image"):
                     await ws.send_text(json.dumps({
-                        "type": "screenshot",
-                        "data": screenshot,
-                        "url": url,
+                        "type":             "screenshot",
+                        "data":             state["image"],
+                        "url":              state.get("url", ""),
+                        "on_singpass_page": state.get("on_singpass_page", False),
                     }))
             await asyncio.sleep(0.5)
     except WebSocketDisconnect:
@@ -182,7 +331,7 @@ async def websocket_endpoint(ws: WebSocket):
             connected_ws.remove(ws)
 
 
-# ── Static mount — optional monitoring panel ───────────────────────────────────
+# ── Static monitoring panel ──────────────────────────────────────────────────────
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
 
 

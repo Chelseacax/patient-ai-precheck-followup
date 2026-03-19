@@ -48,17 +48,53 @@ LLM_MODEL = os.getenv("LLM_MODEL", "")
 
 
 def _resolve_provider():
-    """Use SEA-LION as the sole LLM provider."""
-    key = os.getenv("SEALION_API_KEY", "")
-    if not key:
-        return None
-    return {
-        "type": "openai_compat", "name": "SEA-LION",
-        "api_key": key,
-        "base_url": "https://api.sea-lion.ai/v1",
-        "model": os.getenv("LLM_MODEL", "aisingapore/Qwen-SEA-LION-v4-32B-IT"),
-    }
+    """Resolve LLM provider prioritize OpenRouter/OpenAI for vision support."""
+    openrouter_key = os.getenv("OPENROUTER_API_KEY", "")
+    openai_key = os.getenv("OPENAI_API_KEY", "")
+    sealion_key = os.getenv("SEALION_API_KEY", "")
+    groq_key = os.getenv("GROQ_API_KEY", "")
 
+    if openrouter_key:
+        return {
+            "type": "openai", "name": "OpenRouter",
+            "api_key": openrouter_key,
+            "base_url": "https://openrouter.ai/api/v1",
+            "model": os.getenv("LLM_MODEL", "meta-llama/llama-3.2-90b-vision-instruct"),
+        }
+    if openai_key:
+        return {
+            "type": "openai", "name": "OpenAI",
+            "api_key": openai_key,
+            "base_url": None,
+            "model": os.getenv("LLM_MODEL", "gpt-4o"),
+        }
+    if sealion_key:
+        return {
+            "type": "openai_compat", "name": "SEA-LION",
+            "api_key": sealion_key,
+            "base_url": "https://api.sea-lion.ai/v1",
+            "model": os.getenv("LLM_MODEL", "aisingapore/Qwen-SEA-LION-v4-32B-IT"),
+        }
+    if groq_key:
+        return {
+            "type": "openai_compat", "name": "Groq",
+            "api_key": groq_key,
+            "base_url": "https://api.groq.com/openai/v1",
+            "model": os.getenv("LLM_MODEL", "llama-3.3-70b-versatile"),
+        }
+    return None
+
+
+def _strip_images(messages: list) -> list:
+    """Remove image objects from messages for models that do not support vision."""
+    clean = []
+    for m in messages:
+        if isinstance(m.get("content"), list):
+            text_parts = [p["text"] for p in m["content"] if p.get("type") == "text"]
+            clean.append({**m, "content": "\n".join(text_parts)})
+        else:
+            clean.append(m)
+    return clean
 
 def call_llm(messages, max_tokens=500, temperature=0.7):
     """
@@ -93,7 +129,15 @@ def call_llm(messages, max_tokens=500, temperature=0.7):
         return resp.choices[0].message.content, False
     except AuthenticationError:
         return None, True
-    except Exception:
+    except Exception as e:
+        if "429" in str(e) or "quota" in str(e).lower() or "insufficient_quota" in str(e).lower():
+            if provider and provider["name"] in ["OpenAI", "OpenRouter"]:
+                app.logger.warning(f"{provider['name']} quota exceeded. Falling back.")
+                if provider["name"] == "OpenAI":
+                    os.environ["OPENAI_API_KEY"] = ""
+                else:
+                    os.environ["OPENROUTER_API_KEY"] = ""
+                return call_llm(_strip_images(messages), max_tokens, temperature)
         raise
 
 
@@ -1072,6 +1116,33 @@ AGENT_TOOLS = [
             "required": ["page"],
         },
     }},
+    {"type": "function", "function": {
+        "name": "interact_with_screen",
+        "description": (
+            "Perform an atomic browser action on the current HealthHub screen. "
+            "Prefer 'click_text' over 'click' — it finds elements by their visible label/text and is reliable on the live site. "
+            "Use 'read_page' to list all visible interactive elements (links, buttons) and the current URL before deciding what to click. "
+            "Use 'click' (x, y) ONLY as a last resort."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["click_text", "read_page", "scroll", "click", "type", "press", "clear_modals"],
+                    "description": "'click_text' clicks by text label; 'read_page' lists visible interactive elements and current URL; 'scroll' scrolls the page down to reveal more options; 'click' clicks x/y; 'type' types text; 'press' presses key."
+                },
+                "text":     {"type": "string",  "description": "For click_text: the visible label of the element to click (e.g. 'Login via Singpass'). For type: the text to type."},
+                "role":     {"type": "string",  "description": "Optional ARIA role to narrow click_text search: button | link | menuitem | tab | option"},
+                "selector": {"type": "string",  "description": "Optional CSS selector for direct targeting (overrides text search)"},
+                "x":        {"type": "number",  "description": "X pixel for raw click action"},
+                "y":        {"type": "number",  "description": "Y pixel for raw click action"},
+                "key":      {"type": "string",  "description": "Key name for press action, e.g. Enter, Tab, Escape"},
+                "distance": {"type": "number",  "description": "Pixels to scroll for the scroll action (default 600)"}
+            },
+            "required": ["action"]
+        }
+    }},
 ]
 
 # Tool names list for fallback prompt injection
@@ -1108,6 +1179,14 @@ def call_llm_with_tools(messages, tools=None, max_tokens=500, temperature=0.7):
         return _llm_client.chat.completions.create(**kwargs)
     except Exception as e:
         app.logger.warning("call_llm_with_tools error: %s", e)
+        if "429" in str(e) or "quota" in str(e).lower() or "insufficient_quota" in str(e).lower():
+            if provider and provider["name"] in ["OpenAI", "OpenRouter"]:
+                app.logger.warning(f"{provider['name']} quota exceeded in tools. Falling back.")
+                if provider["name"] == "OpenAI":
+                    os.environ["OPENAI_API_KEY"] = ""
+                else:
+                    os.environ["OPENROUTER_API_KEY"] = ""
+                return call_llm_with_tools(_strip_images(messages), tools, max_tokens, temperature)
         return None
 
 
@@ -1152,16 +1231,52 @@ def dispatch_tool(name, args, patient_id):
 
     # ── HealthHub browser tools (call bridge directly, no DB) ──────────────
     if name == "book_on_healthhub":
-        return _call_bridge("/api/booking/full", {
+        raw = _call_bridge("/api/booking/full", {
             "institution": args.get("institution", ""),
             "specialty":   args.get("specialty", ""),
             "date":        args.get("date", ""),
             "time":        args.get("time", ""),
             "reason":      args.get("reason", ""),
-        }, timeout=90)
+        }, timeout=120)
+
+        if isinstance(raw, dict):
+            # Singpass wall — trigger a long-poll wait then indicate to agent
+            if raw.get("on_singpass_page") or raw.get("paused"):
+                # Ask agent bridge to wait for Singpass login (up to 3 min)
+                wait_result = _call_bridge("/api/singpass/wait?timeout_ms=180000", {}, method="POST", timeout=200)
+                if isinstance(wait_result, dict) and wait_result.get("logged_in"):
+                    return {"status": "singpass_ok", "message": "User has logged in via Singpass. Please retry the booking."}
+                return {"status": "singpass_timeout", "message": "User did not complete Singpass login in time. Please ask them to try again."}
+            # UI mismatch — don't crash, give the agent a clear explanation
+            if raw.get("ui_mismatch"):
+                step = raw.get("step", "unknown step")
+                desc = raw.get("description", "selector not found")
+                return {
+                    "status": "ui_mismatch",
+                    "message": (
+                        f"Could not complete '{step}' automatically — "
+                        f"{desc}. Tell the user what happened and ask them to perform this step manually on the browser screen."
+                    ),
+                }
+        return raw
+
+    if name == "interact_with_screen":
+        return _call_bridge("/api/browser/action", {
+            "action":   args.get("action", ""),
+            "x":        args.get("x", 0),
+            "y":        args.get("y", 0),
+            "text":     args.get("text", ""),
+            "key":      args.get("key", ""),
+            "role":     args.get("role", ""),
+            "selector": args.get("selector", ""),
+        }, timeout=45)
 
     if name == "view_healthhub":
-        return _call_bridge("/api/navigate", {"page": args.get("page", "home")})
+        raw = _call_bridge("/api/navigate", {"page": args.get("page", "home")})
+        if isinstance(raw, dict) and raw.get("on_singpass_page"):
+            return {"status": "singpass_required", "message": "HealthHub is showing a Singpass login screen. Please guide the user to scan the QR code."}
+        return raw
+
 
     # ── DB tools ──────────────────────────────────────────────────────────
     dispatch_map = {
@@ -1209,7 +1324,7 @@ _PLACEHOLDER_PATTERNS = re.compile(
 )
 
 
-def run_agent(messages, patient_id, max_iter=6):
+def run_agent(messages, patient_id, max_iter=12):
     """
     Agentic loop: LLM → tool_calls → execute → results → LLM (repeat).
     Returns final text response.
@@ -1217,8 +1332,32 @@ def run_agent(messages, patient_id, max_iter=6):
     msgs = list(messages)
     last_text = ""
     tool_called_this_run = False
+    scroll_retries = 0  # tracks automatic scroll attempts after not-found errors
+    MAX_SCROLL_RETRIES = 4
+
+    def _inject_screenshot(msg_list):
+        try:
+            state = _call_bridge("/api/browser/state", method="GET", timeout=5)
+            if isinstance(state, dict) and state.get("image"):
+                content = [
+                    {"type": "text", "text": "Screenshot of current HealthHub screen:"},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{state['image']}"}}
+                ]
+                # If Singpass login is detected, append explicit context
+                if state.get("on_singpass_page"):
+                    content.append({"type": "text", "text": "[SYSTEM: The browser is currently showing a Singpass login page with a QR code. Guide the user to open their Singpass app and scan the QR code on screen. Wait for them to complete login before proceeding.]"})
+                msg_list.append({"role": "user", "content": content})
+        except Exception:
+            pass
+
+    _inject_screenshot(msgs)
+
+    global _GLOBAL_STOP_FLAG
+    _GLOBAL_STOP_FLAG = False
 
     for iteration in range(max_iter):
+        if _GLOBAL_STOP_FLAG:
+            return "Execution stopped by user."
         resp = call_llm_with_tools(msgs, AGENT_TOOLS, max_tokens=600)
         if resp is None:
             return last_text or "[AI service unavailable. Please check your API key.]"
@@ -1239,6 +1378,26 @@ def run_agent(messages, patient_id, max_iter=6):
                     "tool_call_id": tc.id,
                     "content": result_str,
                 })
+                # ── Strategic Tool Chaining: auto-scroll on not-found errors ──
+                _err = result.get("error", "") if isinstance(result, dict) else ""
+                _not_found = _err and any(x in _err.lower() for x in [
+                    "not found", "could not find", "no element", "no match",
+                    "timed out", "unable to find",
+                ])
+                if _not_found and scroll_retries < MAX_SCROLL_RETRIES:
+                    scroll_retries += 1
+                    # Auto-perform a scroll so the next iteration has fresh content
+                    _call_bridge("/api/browser/action",
+                                 {"action": "scroll", "distance": 600}, timeout=10)
+                    msgs.append({"role": "user",
+                                 "content": (
+                                     f"[SYSTEM – Auto-scroll #{scroll_retries}/{MAX_SCROLL_RETRIES}] "
+                                     "The element was not found. I have scrolled the page down "
+                                     "to reveal more content. Call read_page again to get "
+                                     "the updated list of visible elements before attempting "
+                                     "to click. Do NOT ask the user to do anything yet."
+                                 )})
+            _inject_screenshot(msgs)
             continue
 
         text = msg.content or ""
@@ -1256,6 +1415,7 @@ def run_agent(messages, patient_id, max_iter=6):
             if clean_text:
                 msgs.append({"role": "assistant", "content": clean_text})
             msgs.append({"role": "user", "content": f"Tool result for {tool_name}: {result_str}"})
+            _inject_screenshot(msgs)
             continue
 
         # Detect placeholder responses: model said "one moment / let me check" but called no tool
@@ -1275,49 +1435,53 @@ def run_agent(messages, patient_id, max_iter=6):
 # Agent System Prompt
 # ---------------------------------------------------------------------------
 
-AGENT_SYSTEM_PROMPT_TEMPLATE = """You are Aria, a warm and caring AI health assistant at MedBridge, Singapore.
-The patient has a live HealthHub browser panel visible on their screen — you control it.
+AGENT_SYSTEM_PROMPT_TEMPLATE = """You are Aria, a proactive AI health assistant at MedBridge, Singapore.
+You have a live view of the patient's HealthHub browser panel — you control it.
 Today is {today}. Patient: {patient_name}. Respond entirely in {language}.
 
 CRITICAL RULES:
-- Call tools IMMEDIATELY — never say "One moment" or any placeholder before calling.
-- After a tool returns, read the result naturally. Never expose JSON or technical details.
-- Be warm, concise, and conversational. This is a voice interaction.
+- Call tools IMMEDIATELY. Never say "Give me a moment" or output placeholder text before calling tools.
+- Read tool results or screen content naturally. Do not expose JSON or technical details.
+- Always call `interact_with_screen(action="read_page")` FIRST to see the current page before asking the user anything.
 
-== BOOKING AN APPOINTMENT ON HEALTHHUB ==
-Ask ONE question at a time, in this fixed order. Wait for the patient's answer before asking the next.
+== GOLDEN RULE: TRY BEFORE YOU ASK ==
+You must NEVER tell the user "I can't find X" or ask them to perform an action manually unless ALL four checks have been exhausted:
+1. SCROLL: Call `interact_with_screen(action="scroll", distance=600)` then `action="read_page"` to see if new elements appeared. Repeat up to 4 times.
+2. SUB-MENUS: If a "See More", "Show All", "Filter", or category tab exists, click it and scan what opens.
+3. VERIFY URL: Call `action="read_page"` to confirm the URL shown matches the expected service page (e.g. /appointments, not /home). If wrong, navigate first.
+4. CONFIRM NEGATIVE: Only give up once you visually confirm "No records found", "No results", or equivalent text on screen.
+Implicit Actions: Navigate sub-pages automatically. E.g. for Vaccination Records: navigate → scroll → click "View Details" → report. Do not stop at a list — go all the way to the final record.
 
-Step 1 — Ask: "Which hospital or polyclinic would you like?"
-  Options: Singapore General Hospital, National University Hospital, Khoo Teck Puat Hospital,
-  Tan Tock Seng Hospital, Clementi Polyclinic, Buona Vista Polyclinic, Jurong Polyclinic
+== eServices NAVIGATION ==
+The agent starts on https://eservices.healthhub.sg/.
+- Do NOT wait for user input on the eServices dashboard. Immediately call `read_page` and `click_text` on the relevant service tile (e.g. "Appointments", "Immunisation", "Medication", "Health Records").
+- After navigating to a service tile, check if a Login is required and handle the Singpass flow below.
 
-Step 2 — Ask: "Which department do you need?"
-  Options: Cardiology, Eye Clinic, General Practice, Neurology, Dental, Orthopaedics, Paediatrics, Vaccination
+Dropdown and List Exhaustion:
+- When searching for a specific institution (e.g. "Clementi Polyclinic") inside a dropdown or list, you MUST iterate through it completely:
+  1. Click the dropdown/list to open it.
+  2. Call `interact_with_screen(action="scroll", distance=400, selector="<dropdown selector>")` to scroll the dropdown.
+  3. Call `read_page` to check if the institution has appeared.
+  4. Repeat up to 5 times before concluding it is unavailable.
 
-Step 3 — Ask: "What date would you like? (any day in March or April 2026)"
+== THE "EYES-FIRST" BOOKING SEQUENCE ==
+Step 1: Navigate — call `view_healthhub(page="appointments")` when user wants to book. Do NOT pre-ask for hospital, date or specialty.
+Step 2: Read — `interact_with_screen(action="read_page")` to see all tiles and buttons.
+Step 3: Click — use `action="click_text"` with the exact visible label. Never guess x/y.
+Step 4: Context-aware questions — once on a selection screen, list ONLY the options visible from `read_page`, then ask the user to choose.
+Step 5: Confirm — after user picks, `click_text` their choice; scroll-verify the confirmation page.
 
-Step 4 — Ask: "What time works for you?"
+== SINGPASS LOGIN ==
+If you see a "Login via Singpass", "Log in", "Sign in", or "Continue with Singpass" button:
+- Call `interact_with_screen(action="click_text", text="Login via Singpass")` to initiate.
+- Do NOT type credentials or fill anything on the Singpass page.
+- Once the QR code appears, tell the patient: "I can see we need to log in with Singpass. Please open your Singpass app and scan the QR code on the screen. Let me know once you're done!"
+- Wait for confirmation before continuing.
 
-Step 5 — Ask: "What is the reason for your visit?"
-  Options: Follow-up consultation, Acute pain or discomfort, Routine check-up, Prescription renewal,
-  Flu jab / Vaccination, Pre-surgery assessment, Specialist referral, Lab test results review
-
-Once you have all 5 answers, say: "Got it! Let me book that for you now on HealthHub."
-Then call book_on_healthhub with all the details — the browser will fill the ENTIRE form at once.
-Do NOT call book_on_healthhub until you have all 5 answers.
-
-After booking succeeds: "Your appointment at [institution] for [specialty] on [date] at [time] is booked!"
-
-== VIEWING ON HEALTHHUB ==
-- Patient wants to see appointments → call view_healthhub(page="appointments")
-- Patient wants to see medications  → call view_healthhub(page="medications")
-- Patient wants to see lab results  → call view_healthhub(page="lab-reports")
-
-== OTHER TOOLS ==
-- get_appointments / cancel_appointment — appointment records
-- get_medications / add_medication / remove_medication — medication management
-- get_family_members / add_family_member — family members
-- get_health_summary — full health overview"""
+== OTHER ACTIONS ==
+- Appointments / medications / records: use `view_healthhub(page=...)` then `read_page` to narrate what you see.
+- Add family members via `add_family_member`.
+- Full overview: `get_health_summary`."""
 
 
 def _build_agent_system_prompt(language, patient_name):
@@ -1402,18 +1566,49 @@ def _normalize_tts_language(language_code):
 @app.route("/api/tts", methods=["POST"])
 def text_to_speech():
     """
+<<<<<<< HEAD
     Synthesize speech using Google Cloud Text-to-Speech.
     Supports two auth methods (checked in order):
       1. GOOGLE_TTS_API_KEY in .env  → uses REST API (no gcloud login needed)
       2. ADC via gcloud auth application-default login → uses Python client library
+=======
+    Synthesize speech using OpenAI TTS if OPENAI_API_KEY is present (much more realistic),
+    otherwise fallback to Google Cloud Text-to-Speech.
+>>>>>>> d958c9bc (agent needs alot of promting to work)
     """
     data = request.get_json() or {}
     text = (data.get("text") or "").strip()
     if not text:
         return jsonify({"error": "text is required"}), 400
 
+    openai_key = os.getenv("OPENAI_API_KEY", "")
+    if openai_key:
+        try:
+            client = OpenAI(api_key=openai_key)
+            # Use 'nova' or 'alloy' for incredibly realistic conversational voice
+            response = client.audio.speech.create(
+                model="tts-1",
+                voice="nova",
+                input=text
+            )
+            return Response(
+                response.content,
+                mimetype="audio/mpeg",
+                headers={"Cache-Control": "no-store"},
+            )
+        except Exception as e:
+            app.logger.warning("OpenAI TTS failed, falling back to Google: %s", e)
+
+    # Fallback: Google Cloud TTS
+    if texttospeech is None:
+        return jsonify({"error": "google-cloud-texttospeech package is not installed."}), 500
+
     language_code = _normalize_tts_language(data.get("language_code", "en-SG"))
+    # Use higher quality voices if standard is requested
     voice_name = (data.get("voice_name") or "").strip() or None
+    if not voice_name and language_code == "en-SG":
+        voice_name = "en-SG-Neural2-A"
+    
     speaking_rate = data.get("speaking_rate", 0.92)
     pitch = data.get("pitch", 0.0)
 
@@ -1423,10 +1618,18 @@ def text_to_speech():
     except (TypeError, ValueError):
         return jsonify({"error": "speaking_rate and pitch must be numbers"}), 400
 
+<<<<<<< HEAD
     speaking_rate = max(0.25, min(4.0, speaking_rate))
     pitch = max(-20.0, min(20.0, pitch))
 
     api_key = os.getenv("GOOGLE_TTS_API_KEY", "").strip()
+=======
+    try:
+        client = texttospeech.TextToSpeechClient()
+        voice_kwargs = {"language_code": language_code}
+        if voice_name:
+            voice_kwargs["name"] = voice_name
+>>>>>>> d958c9bc (agent needs alot of promting to work)
 
     if api_key:
         # --- Method 1: REST API with API Key (no gcloud login needed) ---
@@ -1438,6 +1641,7 @@ def text_to_speech():
             if voice_name:
                 voice_payload["name"] = voice_name
 
+<<<<<<< HEAD
             payload = {
                 "input": {"text": text},
                 "voice": voice_payload,
@@ -1493,6 +1697,32 @@ def text_to_speech():
         except Exception as e:
             app.logger.error("Google TTS (ADC) error: %s", e)
             return jsonify({"error": f"Google TTS failed: {str(e)[:250]}"}), 502
+=======
+        return Response(
+            response.audio_content,
+            mimetype="audio/mpeg",
+            headers={"Cache-Control": "no-store"},
+        )
+    except Exception as e:
+        app.logger.error("Google TTS error: %s", e)
+        
+        # Ultimate Fallback: gTTS
+        try:
+            from gtts import gTTS
+            import io
+            app.logger.info("Using gTTS fallback.")
+            tts_res = gTTS(text=text, lang="en", tld="sg")
+            fp = io.BytesIO()
+            tts_res.write_to_fp(fp)
+            return Response(
+                fp.getvalue(),
+                mimetype="audio/mpeg",
+                headers={"Cache-Control": "no-store"}
+            )
+        except Exception as gtts_e:
+            app.logger.error("gTTS fallback failed: %s", gtts_e)
+            return jsonify({"error": f"TTS completely failed: {str(e)[:250]}"}), 502
+>>>>>>> d958c9bc (agent needs alot of promting to work)
 
 
 @app.route("/api/voice", methods=["POST"])
@@ -2029,6 +2259,14 @@ def _fallback_greeting(language, name, session_type):
 # ---------------------------------------------------------------------------
 # API Routes — Agent
 # ---------------------------------------------------------------------------
+
+_GLOBAL_STOP_FLAG = False
+
+@app.route("/api/agent/stop", methods=["POST"])
+def agent_stop():
+    global _GLOBAL_STOP_FLAG
+    _GLOBAL_STOP_FLAG = True
+    return jsonify({"status": "stopping_agent"})
 
 @app.route("/api/agent/start", methods=["POST"])
 def agent_start():

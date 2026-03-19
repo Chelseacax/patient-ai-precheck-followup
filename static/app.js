@@ -1295,6 +1295,13 @@ async function sendAgentMessage(textOverride) {
         }
         if (!agentState.sessionId) throw new Error('Agent session not initialized');
 
+        // Show Kill Switch
+        const stopBtn = document.getElementById('btn-stop-agent');
+        if (stopBtn) {
+            stopBtn.classList.remove('hidden');
+            stopBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/></svg> Stop Agent`;
+        }
+
         const res = await fetch(`${API}/api/agent/sessions/${agentState.sessionId}/message`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1302,6 +1309,8 @@ async function sendAgentMessage(textOverride) {
         });
         const data = await res.json();
         hideAgentTyping();
+
+        if (stopBtn) stopBtn.classList.add('hidden'); // Hide Kill Switch
 
         appendAgentBubble('assistant', data.reply);
 
@@ -1312,6 +1321,10 @@ async function sendAgentMessage(textOverride) {
         // Refresh dashboard data after each message (tools may have run)
         setTimeout(loadAgentDashboard, 800);
     } catch (err) {
+        // Hide Kill Switch on error
+        const stopBtn = document.getElementById('btn-stop-agent');
+        if (stopBtn) stopBtn.classList.add('hidden');
+        
         hideAgentTyping();
         appendAgentBubble('assistant', '[Connection error — please try again.]');
         console.error(err);
@@ -1626,6 +1639,24 @@ function appendAgentBubble(role, text) {
 
     el.appendChild(bubble);
     el.scrollTop = el.scrollHeight;
+}
+
+async function stopAgent() {
+    // Optional UI feedback
+    const btn = document.getElementById('btn-stop-agent');
+    if (btn) btn.innerHTML = 'Stopping...';
+    
+    try {
+        await fetch('/api/agent/stop', { method: 'POST' });
+        appendAgentBubble('assistant', '⚠️ Agent execution stopped by user.');
+    } catch (e) {
+        console.error('Error stopping agent:', e);
+    }
+    
+    if (btn) {
+        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/></svg> Stop Agent`;
+        btn.classList.add('hidden'); // Hide the button after stopping
+    }
 }
 
 function showAgentTyping() {

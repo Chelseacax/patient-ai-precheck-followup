@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,327 +10,464 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/styles.css">
 </head>
+
 <body>
 
-<!-- ===== Top Navigation ===== -->
-<nav class="topnav">
-    <div class="topnav-brand" onclick="navigateTo('home')">
-        <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="2" y="10" width="24" height="8" rx="2" fill="#4f9cf7"/><rect x="10" y="2" width="8" height="24" rx="2" fill="#4f9cf7"/></svg>
-        <span>MedBridge</span>
-    </div>
-    <div class="topnav-links">
-        <button class="nav-btn active" data-view="home" onclick="navigateTo('home')">Home</button>
-        <button class="nav-btn" data-view="agent" onclick="navigateTo('agent')">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-            My Health
-        </button>
-        <button class="nav-btn" data-view="doctor" onclick="navigateTo('doctor')">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-            Doctor Portal
-        </button>
-    </div>
-</nav>
-
-<!-- ===== API Key Banner ===== -->
-<div id="api-key-banner" class="api-key-banner hidden">
-    <div class="api-key-banner-content">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        <span><strong>API key not configured.</strong> Enter your OpenAI or Groq API key to enable AI conversations.</span>
-        <div class="api-key-input-group">
-            <input type="password" id="api-key-input" placeholder="sk-... or gsk_..." autocomplete="off">
-            <button class="btn btn-primary btn-sm" onclick="saveApiKey()">Save Key</button>
+    <!-- ===== Top Navigation ===== -->
+    <nav class="topnav">
+        <div class="topnav-brand" onclick="navigateTo('home')">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                <rect x="2" y="10" width="24" height="8" rx="2" fill="#4f9cf7" />
+                <rect x="10" y="2" width="8" height="24" rx="2" fill="#4f9cf7" />
+            </svg>
+            <span>MedBridge</span>
         </div>
-        <button class="btn btn-icon btn-sm" onclick="dismissBanner()" title="Dismiss" style="opacity:0.6">&times;</button>
-    </div>
-</div>
-
-<!-- ===== VIEW: Home ===== -->
-<section id="view-home" class="view active">
-    <div class="hero">
-        <div class="hero-content">
-            <h1>AI-Powered Healthcare Assistant</h1>
-            <p class="hero-sub">Meet Aria, your multilingual voice AI health companion. Book appointments on HealthHub, manage medications, and review health records — all by voice. Doctors receive structured clinical summaries with full bilingual transcripts.</p>
+        <div class="topnav-links">
+            <button class="nav-btn active" data-view="home" onclick="navigateTo('home')">Home</button>
+            <button class="nav-btn" data-view="agent" onclick="navigateTo('agent')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path
+                        d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                </svg>
+                My Health
+            </button>
+            <button class="nav-btn" data-view="doctor" onclick="navigateTo('doctor')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                </svg>
+                Doctor Portal
+            </button>
         </div>
+    </nav>
 
-        <div class="portal-cards">
-            <div class="portal-card agent-card" onclick="navigateTo('agent')">
-                <div class="portal-icon agent-icon">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                </div>
-                <h2>My Health</h2>
-                <p>Manage appointments, medications, and health records with Aria — your AI health companion. Voice-first and always available.</p>
-                <ul class="portal-features">
-                    <li>Book &amp; manage appointments</li>
-                    <li>Medication tracking with reminders</li>
-                    <li>Family member health management</li>
-                </ul>
-                <span class="portal-cta">Open My Health &rarr;</span>
+    <!-- ===== API Key Banner ===== -->
+    <div id="api-key-banner" class="api-key-banner hidden">
+        <div class="api-key-banner-content">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <span><strong>API key not configured.</strong> Enter your OpenAI or Groq API key to enable AI
+                conversations.</span>
+            <div class="api-key-input-group">
+                <input type="password" id="api-key-input" placeholder="sk-... or gsk_..." autocomplete="off">
+                <button class="btn btn-primary btn-sm" onclick="saveApiKey()">Save Key</button>
             </div>
-            <div class="portal-card doctor-card" onclick="navigateTo('doctor')">
-                <div class="portal-icon doctor-icon">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-                </div>
-                <h2>Doctor Portal</h2>
-                <p>Review structured clinical summaries from patient voice check-ins — with bilingual transcripts and red-flag alerts, all in English.</p>
-                <ul class="portal-features">
-                    <li>Structured clinical summaries</li>
-                    <li>Bilingual conversation transcripts</li>
-                    <li>Urgency flags &amp; cultural context</li>
-                </ul>
-                <span class="portal-cta">Enter Doctor Portal &rarr;</span>
-            </div>
-        </div>
-
-        <div class="hero-features">
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                </div>
-                <h3>18 Languages &amp; Dialects</h3>
-                <p>华语, 福建话, 潮州话, 广东话, Malay, Tamil, and more — with Singapore dialect support</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
-                </div>
-                <h3>Fully Voice-Driven</h3>
-                <p>Aria listens, speaks, and listens again — automatic turn-taking with no buttons required</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                </div>
-                <h3>Clinical Summaries</h3>
-                <p>Structured reports with chief complaints, medications, red flags, and cultural considerations</p>
-            </div>
+            <button class="btn btn-icon btn-sm" onclick="dismissBanner()" title="Dismiss"
+                style="opacity:0.6">&times;</button>
         </div>
     </div>
-</section>
 
-<!-- ===== VIEW: My Health (Agentic AI) ===== -->
-<section id="view-agent" class="view">
-    <div class="portal-label agent-label">My Health</div>
-    <div class="agent-view-split">
-    <!-- Left: all agent steps -->
-    <div class="agent-view-left">
+    <!-- ===== VIEW: Home ===== -->
+    <section id="view-home" class="view active">
+        <div class="hero">
+            <div class="hero-content">
+                <h1>AI-Powered Healthcare Assistant</h1>
+                <p class="hero-sub">Meet Aria, your multilingual voice AI health companion. Book appointments on
+                    HealthHub, manage medications, and review health records — all by voice. Doctors receive structured
+                    clinical summaries with full bilingual transcripts.</p>
+            </div>
 
-    <!-- Step 1: Setup -->
-    <div id="agent-setup" class="agent-step active">
-        <div class="container-narrow">
-            <div class="card card-elevated">
-                <div class="checkin-aria-avatar agent-aria-avatar">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            <div class="portal-cards">
+                <div class="portal-card agent-card" onclick="navigateTo('agent')">
+                    <div class="portal-icon agent-icon">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.5">
+                            <path
+                                d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                        </svg>
+                    </div>
+                    <h2>My Health</h2>
+                    <p>Manage appointments, medications, and health records with Aria — your AI health companion.
+                        Voice-first and always available.</p>
+                    <ul class="portal-features">
+                        <li>Book &amp; manage appointments</li>
+                        <li>Medication tracking with reminders</li>
+                        <li>Family member health management</li>
+                    </ul>
+                    <span class="portal-cta">Open My Health &rarr;</span>
                 </div>
-                <div class="card-header" style="text-align:center">
-                    <h2>Aria — My Health Assistant</h2>
-                    <p class="text-muted">Book appointments, manage medications, and view your health records — all by voice.</p>
+                <div class="portal-card doctor-card" onclick="navigateTo('doctor')">
+                    <div class="portal-icon doctor-icon">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.5">
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                        </svg>
+                    </div>
+                    <h2>Doctor Portal</h2>
+                    <p>Review structured clinical summaries from patient voice check-ins — with bilingual transcripts
+                        and red-flag alerts, all in English.</p>
+                    <ul class="portal-features">
+                        <li>Structured clinical summaries</li>
+                        <li>Bilingual conversation transcripts</li>
+                        <li>Urgency flags &amp; cultural context</li>
+                    </ul>
+                    <span class="portal-cta">Enter Doctor Portal &rarr;</span>
                 </div>
-                <form id="form-agent" onsubmit="handleAgentSetup(event)">
-                    <div class="form-group">
-                        <label for="agent-name">Full Name <span class="required">*</span></label>
-                        <input type="text" id="agent-name" required placeholder="e.g. Ahmad bin Ibrahim" autocomplete="name">
+            </div>
+
+            <div class="hero-features">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="2" y1="12" x2="22" y2="12" />
+                            <path
+                                d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                        </svg>
                     </div>
-                    <div class="form-group">
-                        <label for="agent-language">Preferred Language <span class="required">*</span></label>
-                        <select id="agent-language" required onchange="updateAgentDialects()"></select>
+                    <h3>18 Languages &amp; Dialects</h3>
+                    <p>华语, 福建话, 潮州话, 广东话, Malay, Tamil, and more — with Singapore dialect support</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                        </svg>
                     </div>
-                    <div class="form-group">
-                        <label for="agent-dialect">Dialect / Variant</label>
-                        <select id="agent-dialect"><option value="">— Select —</option></select>
+                    <h3>Fully Voice-Driven</h3>
+                    <p>Aria listens, speaks, and listens again — automatic turn-taking with no buttons required</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="16" y1="13" x2="8" y2="13" />
+                            <line x1="16" y1="17" x2="8" y2="17" />
+                        </svg>
                     </div>
-                    <div id="notification-permission-banner" class="notification-banner hidden">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                        <span>Enable browser notifications for medication reminders</span>
-                        <button type="button" class="btn btn-sm btn-primary" onclick="enableNotifications()">Enable</button>
+                    <h3>Clinical Summaries</h3>
+                    <p>Structured reports with chief complaints, medications, red flags, and cultural considerations</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== VIEW: My Health (Agentic AI) ===== -->
+    <section id="view-agent" class="view">
+        <div class="portal-label agent-label">My Health</div>
+        <div class="agent-view-split">
+            <!-- Left: all agent steps -->
+            <div class="agent-view-left">
+
+                <!-- Step 1: Setup -->
+                <div id="agent-setup" class="agent-step active">
+                    <div class="container-narrow">
+                        <div class="card card-elevated">
+                            <div class="checkin-aria-avatar agent-aria-avatar">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="1.5">
+                                    <path
+                                        d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                                </svg>
+                            </div>
+                            <div class="card-header" style="text-align:center">
+                                <h2>Aria — My Health Assistant</h2>
+                                <p class="text-muted">Book appointments, manage medications, and view your health
+                                    records — all by voice.</p>
+                            </div>
+                            <form id="form-agent" onsubmit="handleAgentSetup(event)">
+                                <div class="form-group">
+                                    <label for="agent-name">Full Name <span class="required">*</span></label>
+                                    <input type="text" id="agent-name" required placeholder="e.g. Ahmad bin Ibrahim"
+                                        autocomplete="name">
+                                </div>
+                                <div class="form-group">
+                                    <label for="agent-language">Preferred Language <span
+                                            class="required">*</span></label>
+                                    <select id="agent-language" required onchange="updateAgentDialects()"></select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="agent-dialect">Dialect / Variant</label>
+                                    <select id="agent-dialect">
+                                        <option value="">— Select —</option>
+                                    </select>
+                                </div>
+                                <div id="notification-permission-banner" class="notification-banner hidden">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                                    </svg>
+                                    <span>Enable browser notifications for medication reminders</span>
+                                    <button type="button" class="btn btn-sm btn-primary"
+                                        onclick="enableNotifications()">Enable</button>
+                                </div>
+                                <button type="submit" class="btn btn-agent btn-block" id="btn-start-agent">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <path
+                                            d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                                    </svg>
+                                    Start with Aria
+                                </button>
+                                <p class="text-muted" style="font-size:0.8rem;text-align:center;margin-top:0.75rem;">You
+                                    can type or speak your requests.</p>
+                            </form>
+                        </div>
                     </div>
-                    <button type="submit" class="btn btn-agent btn-block" id="btn-start-agent">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                        Start with Aria
+                </div>
+
+                <!-- Step 2: Chat with HealthHub Live View -->
+                <div id="agent-chat" class="agent-step">
+                    <div class="chat-container">
+                        <!-- ═══ COMMAND CENTER RIBBON ═══ -->
+                        <div class="command-ribbon" id="command-ribbon">
+                            <div class="ribbon-left">
+                                <button class="btn btn-icon ribbon-back" onclick="backToAgentSetup()" title="Back">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <path d="M19 12H5M12 19l-7-7 7-7" />
+                                    </svg>
+                                </button>
+                                <h3 class="ribbon-title" id="agent-chat-title">Health Agent</h3>
+                                <span class="badge agent-badge ribbon-lang-badge" id="agent-lang-badge">English</span>
+                                <span class="ribbon-status-dot" id="ribbon-status-dot"></span>
+                                <span class="ribbon-status-text" id="ribbon-status-text">Ready</span>
+                            </div>
+                            <div class="ribbon-right">
+                                <!-- Dashboard shortcut -->
+                                <button class="ribbon-btn" onclick="showAgentDashboard()" title="Dashboard">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <rect x="3" y="3" width="7" height="7" />
+                                        <rect x="14" y="3" width="7" height="7" />
+                                        <rect x="14" y="14" width="7" height="7" />
+                                        <rect x="3" y="14" width="7" height="7" />
+                                    </svg>
+                                </button>
+                                <!-- Auto Voice Toggle -->
+                                <button class="ribbon-btn ribbon-auto" id="btn-agent-auto-toggle"
+                                    onclick="toggleAgentAutoMode()" title="Toggle auto voice">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                    </svg>
+                                    <span id="agent-auto-mode-label">Auto On</span>
+                                </button>
+                                <!-- ⛔ KILL SWITCH -->
+                                <button class="ribbon-btn ribbon-stop" id="btn-stop-agent" onclick="stopAgent()"
+                                    title="Stop agent">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                                    </svg>
+                                    Stop Agent
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Voice indicator -->
+                        <div id="agent-voice-indicator" class="checkin-voice-indicator hidden">
+                            <div class="voice-pulse-ring"></div>
+                            <div class="voice-pulse-ring delay-1"></div>
+                            <div class="voice-pulse-ring delay-2"></div>
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                            </svg>
+                            <span id="agent-voice-status-text">Listening…</span>
+                        </div>
+
+                        <div class="chat-messages" id="agent-messages"></div>
+
+                        <!-- Dashboard strip (collapsible) -->
+                        <div id="agent-dashboard-strip" class="agent-dashboard-strip hidden">
+                            <div class="dashboard-strip-header">
+                                <span>Quick Overview</span>
+                                <button class="btn btn-icon btn-sm" onclick="toggleDashboardStrip()"
+                                    title="Close">×</button>
+                            </div>
+                            <div class="dashboard-strip-cards" id="strip-cards"></div>
+                        </div>
+
+                        <div id="agent-voice-status" class="voice-status">
+                            <span class="voice-status-dot"></span>
+                            <span id="agent-status-text">Listening…</span>
+                        </div>
+
+                        <div class="chat-input-bar">
+                            <textarea id="agent-input" rows="1" placeholder="Type or let Aria listen automatically…"
+                                onkeydown="handleAgentKey(event)" oninput="autoResize(this)"></textarea>
+                            <button class="btn btn-mic" id="btn-agent-mic" onclick="toggleAgentVoice()"
+                                title="Speak your request">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                    <line x1="12" y1="19" x2="12" y2="23" />
+                                    <line x1="8" y1="23" x2="16" y2="23" />
+                                </svg>
+                            </button>
+                            <button class="btn btn-primary btn-icon" id="btn-agent-send" onclick="sendAgentMessage()">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <line x1="22" y1="2" x2="11" y2="13" />
+                                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div><!-- .chat-container -->
+                </div><!-- #agent-chat -->
+
+                <!-- Step 3: Full Dashboard -->
+                <div id="agent-dashboard" class="agent-step">
+                    <div class="agent-dashboard-full">
+                        <div class="agent-dash-header">
+                            <button class="btn btn-icon" onclick="backToAgentChat()" title="Back to chat">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <path d="M19 12H5M12 19l-7-7 7-7" />
+                                </svg>
+                            </button>
+                            <h2>Health Dashboard</h2>
+                            <span id="agent-dash-patient-name" class="badge agent-badge"></span>
+                        </div>
+
+                        <div class="agent-dash-sections">
+                            <div class="agent-dash-section">
+                                <h3>
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                                        <line x1="16" y1="2" x2="16" y2="6" />
+                                        <line x1="8" y1="2" x2="8" y2="6" />
+                                        <line x1="3" y1="10" x2="21" y2="10" />
+                                    </svg>
+                                    Upcoming Appointments
+                                </h3>
+                                <div id="dash-appointments" class="health-cards-grid"></div>
+                            </div>
+
+                            <div class="agent-dash-section">
+                                <h3>
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <path
+                                            d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+                                    </svg>
+                                    Active Medications
+                                </h3>
+                                <div id="dash-medications" class="health-cards-grid"></div>
+                            </div>
+
+                            <div class="agent-dash-section">
+                                <h3>
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                        <circle cx="9" cy="7" r="4" />
+                                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                                    </svg>
+                                    Family Members
+                                </h3>
+                                <div id="dash-family" class="health-cards-grid"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div><!-- .agent-view-left -->
+
+            <!-- Right: HealthHub Live — always visible in My Health -->
+            <div class="hh-live-panel">
+                <div class="hh-live-header">
+                    <span class="hh-live-dot" id="hh-live-dot"></span>
+                    <span class="hh-live-title">HealthHub Live</span>
+                    <span class="hh-live-url" id="hh-live-url"></span>
+                </div>
+                <div class="hh-live-screen">
+                    <img id="hh-live-img" alt="" style="display:none; width:100%; height:100%; object-fit:contain;">
+                    <div class="hh-live-placeholder" id="hh-live-placeholder">
+                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.5">
+                            <rect x="2" y="3" width="20" height="14" rx="2" />
+                            <polyline points="8 21 12 17 16 21" />
+                            <line x1="12" y1="17" x2="12" y2="21" />
+                        </svg>
+                        <p>HealthHub Live</p>
+                        <small>Browser automation will appear here<br>when Aria performs actions on HealthHub.</small>
+                    </div>
+                </div>
+            </div><!-- .hh-live-panel -->
+
+        </div><!-- .agent-view-split -->
+    </section>
+
+    <!-- ===== VIEW: Doctor Portal ===== -->
+    <section id="view-doctor" class="view">
+        <div class="portal-label doctor-label">Doctor Portal</div>
+        <div class="dashboard">
+            <div class="dashboard-sidebar">
+                <div class="sidebar-header">
+                    <h3>Book Appointments</h3>
+                    <button class="btn btn-sm btn-outline" onclick="loadSessions()" title="Refresh list">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <polyline points="23 4 23 10 17 10" />
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                        </svg>
+                        Refresh
                     </button>
-                    <p class="text-muted" style="font-size:0.8rem;text-align:center;margin-top:0.75rem;">You can type or speak your requests.</p>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- Step 2: Chat with HealthHub Live View -->
-    <div id="agent-chat" class="agent-step">
-        <div class="chat-container">
-            <div class="chat-header">
-                <div class="chat-header-left">
-                    <button class="btn btn-icon" onclick="backToAgentSetup()" title="Back">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-                    </button>
-                    <div>
-                        <h3 id="agent-chat-title">Aria — My Health Assistant</h3>
-                        <span class="badge agent-badge" id="agent-lang-badge">English</span>
-                        <span class="badge badge-outline">Health Agent</span>
+                </div>
+                <div class="sidebar-filters">
+                    <label class="sidebar-filter-label">Sort by</label>
+                    <select id="filter-sort" onchange="loadSessions()">
+                        <option value="newest">Newest first</option>
+                        <option value="name-az">Name (A–Z)</option>
+                        <option value="name-za">Name (Z–A)</option>
+                    </select>
+                    <label class="sidebar-filter-label">Status</label>
+                    <select id="filter-status" onchange="loadSessions()">
+                        <option value="">All Status</option>
+                        <option value="completed">Completed</option>
+                        <option value="in_progress">In Progress</option>
+                    </select>
+                    <label class="sidebar-filter-label">Priority</label>
+                    <select id="filter-urgent" onchange="loadSessions()">
+                        <option value="">All</option>
+                        <option value="urgent">Urgent only</option>
+                    </select>
+                </div>
+                <div id="session-list" class="session-list">
+                    <div class="empty-state">
+                        <p>No check-ins yet.</p>
+                        <p class="text-muted">Patient voice check-ins appear here once submitted.</p>
                     </div>
                 </div>
-                <div class="checkin-header-actions">
-                    <button class="btn btn-sm btn-outline" onclick="showAgentDashboard()" title="View health dashboard">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                        Dashboard
-                    </button>
-                    <button class="btn btn-icon btn-sm" id="btn-agent-auto-toggle" onclick="toggleAgentAutoMode()" title="Toggle auto voice loop">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
-                        <span id="agent-auto-mode-label">Auto On</span>
-                    </button>
-                </div>
             </div>
-
-            <!-- Voice indicator -->
-            <div id="agent-voice-indicator" class="checkin-voice-indicator hidden">
-                <div class="voice-pulse-ring"></div>
-                <div class="voice-pulse-ring delay-1"></div>
-                <div class="voice-pulse-ring delay-2"></div>
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
-                <span id="agent-voice-status-text">Listening…</span>
-            </div>
-
-            <div class="chat-messages" id="agent-messages"></div>
-
-            <!-- Dashboard strip (collapsible) -->
-            <div id="agent-dashboard-strip" class="agent-dashboard-strip hidden">
-                <div class="dashboard-strip-header">
-                    <span>Quick Overview</span>
-                    <button class="btn btn-icon btn-sm" onclick="toggleDashboardStrip()" title="Close">×</button>
-                </div>
-                <div class="dashboard-strip-cards" id="strip-cards"></div>
-            </div>
-
-            <div id="agent-voice-status" class="voice-status">
-                <span class="voice-status-dot"></span>
-                <span id="agent-status-text">Listening…</span>
-            </div>
-
-            <div class="chat-input-bar">
-                <textarea id="agent-input" rows="1" placeholder="Type or let Aria listen automatically…" onkeydown="handleAgentKey(event)" oninput="autoResize(this)"></textarea>
-                <button class="btn btn-mic" id="btn-agent-mic" onclick="toggleAgentVoice()" title="Speak your request">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                </button>
-                <button class="btn btn-primary btn-icon" id="btn-agent-send" onclick="sendAgentMessage()">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                </button>
-            </div>
-        </div><!-- .chat-container -->
-    </div><!-- #agent-chat -->
-
-    <!-- Step 3: Full Dashboard -->
-    <div id="agent-dashboard" class="agent-step">
-        <div class="agent-dashboard-full">
-            <div class="agent-dash-header">
-                <button class="btn btn-icon" onclick="backToAgentChat()" title="Back to chat">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-                </button>
-                <h2>Health Dashboard</h2>
-                <span id="agent-dash-patient-name" class="badge agent-badge"></span>
-            </div>
-
-            <div class="agent-dash-sections">
-                <div class="agent-dash-section">
-                    <h3>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                        Upcoming Appointments
-                    </h3>
-                    <div id="dash-appointments" class="health-cards-grid"></div>
-                </div>
-
-                <div class="agent-dash-section">
-                    <h3>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
-                        Active Medications
-                    </h3>
-                    <div id="dash-medications" class="health-cards-grid"></div>
-                </div>
-
-                <div class="agent-dash-section">
-                    <h3>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                        Family Members
-                    </h3>
-                    <div id="dash-family" class="health-cards-grid"></div>
+            <div class="dashboard-main" id="dashboard-main">
+                <div class="empty-state-large">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)"
+                        stroke-width="1.5">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                    <h3>Select a Patient</h3>
+                    <p class="text-muted">Choose a patient check-in from the sidebar to view their clinical summary and
+                        voice conversation transcript.</p>
                 </div>
             </div>
         </div>
+    </section>
+
+    <!-- ===== Spinner Overlay ===== -->
+    <div id="spinner-overlay" class="spinner-overlay hidden">
+        <div class="spinner"></div>
+        <p id="spinner-text">Processing…</p>
     </div>
 
-    </div><!-- .agent-view-left -->
-
-    <!-- Right: HealthHub Live — always visible in My Health -->
-    <div class="hh-live-panel">
-        <div class="hh-live-header">
-            <span class="hh-live-dot" id="hh-live-dot"></span>
-            <span class="hh-live-title">HealthHub Live</span>
-            <span class="hh-live-url" id="hh-live-url"></span>
-        </div>
-        <div class="hh-live-screen">
-            <img id="hh-live-img" alt="" style="display:none; width:100%; height:100%; object-fit:contain;">
-            <div class="hh-live-placeholder" id="hh-live-placeholder">
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                <p>HealthHub Live</p>
-                <small>Browser automation will appear here<br>when Aria performs actions on HealthHub.</small>
-            </div>
-        </div>
-    </div><!-- .hh-live-panel -->
-
-    </div><!-- .agent-view-split -->
-</section>
-
-<!-- ===== VIEW: Doctor Portal ===== -->
-<section id="view-doctor" class="view">
-    <div class="portal-label doctor-label">Doctor Portal</div>
-    <div class="dashboard">
-        <div class="dashboard-sidebar">
-            <div class="sidebar-header">
-                <h3>Book Appointments</h3>
-                <button class="btn btn-sm btn-outline" onclick="loadSessions()" title="Refresh list">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                    Refresh
-                </button>
-            </div>
-            <div class="sidebar-filters">
-                <label class="sidebar-filter-label">Sort by</label>
-                <select id="filter-sort" onchange="loadSessions()">
-                    <option value="newest">Newest first</option>
-                    <option value="name-az">Name (A–Z)</option>
-                    <option value="name-za">Name (Z–A)</option>
-                </select>
-                <label class="sidebar-filter-label">Status</label>
-                <select id="filter-status" onchange="loadSessions()">
-                    <option value="">All Status</option>
-                    <option value="completed">Completed</option>
-                    <option value="in_progress">In Progress</option>
-                </select>
-                <label class="sidebar-filter-label">Priority</label>
-                <select id="filter-urgent" onchange="loadSessions()">
-                    <option value="">All</option>
-                    <option value="urgent">Urgent only</option>
-                </select>
-            </div>
-            <div id="session-list" class="session-list">
-                <div class="empty-state">
-                    <p>No check-ins yet.</p>
-                    <p class="text-muted">Patient voice check-ins appear here once submitted.</p>
-                </div>
-            </div>
-        </div>
-        <div class="dashboard-main" id="dashboard-main">
-            <div class="empty-state-large">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                <h3>Select a Patient</h3>
-                <p class="text-muted">Choose a patient check-in from the sidebar to view their clinical summary and voice conversation transcript.</p>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- ===== Spinner Overlay ===== -->
-<div id="spinner-overlay" class="spinner-overlay hidden">
-    <div class="spinner"></div>
-    <p id="spinner-text">Processing…</p>
-</div>
-
-<script src="/app.js"></script>
+    <script src="/app.js"></script>
 </body>
+
 </html>
