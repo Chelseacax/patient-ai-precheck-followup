@@ -123,33 +123,47 @@ class Dispatcher:
         """
         page = self._page
 
-        # 1. JS-based: find any visible overlay/modal and click its first button
-        #    This handles SVG icon close buttons (no text content) like HealthHub's newsletter popup
+        # 1. JS-based: find any visible modal/overlay and click its close button.
+        #    Handles SVG icon buttons (no text) like HealthHub's newsletter popup.
+        #    Sorts by z-index descending so the topmost overlay is targeted first,
+        #    avoiding accidental clicks on the fixed header or other navbars.
         try:
             clicked = await page.evaluate("""() => {
-                // Prioritise buttons with close/dismiss semantics
+                // Pass 1: explicit close/dismiss semantics
                 const closeSelectors = [
-                    'button[aria-label*="close" i]',
-                    'button[aria-label*="dismiss" i]',
-                    'button[title*="close" i]',
-                    '[data-dismiss]', '[data-bs-dismiss]',
+                    'button[aria-label*="close" i]', 'button[aria-label*="dismiss" i]',
+                    'button[title*="close" i]', '[data-dismiss]', '[data-bs-dismiss]',
                     '.modal-close', '.close-btn', '.btn-close', '.modal__close',
                 ];
                 for (const sel of closeSelectors) {
                     const el = document.querySelector(sel);
                     if (el && el.offsetParent !== null) { el.click(); return true; }
                 }
-                // Find any fixed/absolute overlay with z-index > 10 and click its first button
-                const allEls = [...document.querySelectorAll('*')];
-                for (const el of allEls) {
-                    const s = window.getComputedStyle(el);
-                    const z = parseInt(s.zIndex) || 0;
-                    if ((s.position === 'fixed' || s.position === 'absolute') && z > 10
+
+                // Pass 2: find all fixed/absolute overlays, sort by z-index descending,
+                // require modal-like dimensions (> 200px wide, > 100px tall) to skip
+                // narrow navbars and notification strips
+                const vw = window.innerWidth, vh = window.innerHeight;
+                const overlays = [...document.querySelectorAll('*')]
+                    .map(el => ({ el, s: window.getComputedStyle(el) }))
+                    .filter(({ el, s }) => {
+                        const z = parseInt(s.zIndex) || 0;
+                        return (s.position === 'fixed' || s.position === 'absolute')
+                            && z > 100
                             && s.display !== 'none' && s.visibility !== 'hidden'
-                            && el.offsetHeight > 50 && el.offsetWidth > 50) {
-                        const btn = el.querySelector('button');
-                        if (btn && btn.offsetParent !== null) { btn.click(); return true; }
-                    }
+                            && el.offsetWidth > 200 && el.offsetHeight > 100;
+                    })
+                    .sort((a, b) => (parseInt(b.s.zIndex) || 0) - (parseInt(a.s.zIndex) || 0));
+
+                for (const { el } of overlays) {
+                    // Try a button with close-ish text first, then any button
+                    const closeBtn = el.querySelector(
+                        'button[aria-label*="close" i], button[aria-label*="dismiss" i], ' +
+                        'button[title*="close" i]'
+                    );
+                    const anyBtn = el.querySelector('button');
+                    const btn = closeBtn || anyBtn;
+                    if (btn && btn.offsetParent !== null) { btn.click(); return true; }
                 }
                 return false;
             }""")
